@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -30,6 +31,7 @@ import { DateRange } from 'react-day-picker';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import HrdActivityPrintLayout from '@/components/hrd-activity-print-layout';
 
 
 type ActiveMenu = 'Absensi Hari Ini' | 'Riwayat Absensi' | 'Kegiatan Karyawan Hari Ini' | 'Riwayat Kegiatan Karyawan' | 'Penalti Karyawan' | 'Reward Karyawan';
@@ -457,6 +459,7 @@ export default function HrdPusatPage() {
                         <div className="flex items-center gap-2 mb-4">
                             <Popover><PopoverTrigger asChild><Button variant="outline" className={cn("w-[280px] justify-start text-left font-normal", !activityDateRange && "text-muted-foreground" )}><CalendarIcon className="mr-2 h-4 w-4" />{activityDateRange?.from ? ( activityDateRange.to ? (<>{format(activityDateRange.from, "LLL dd, y")} - {format(activityDateRange.to, "LLL dd, y")}</>) : (format(activityDateRange.from, "LLL dd, y"))) : (<span>Pilih rentang tanggal</span>)}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="range" selected={activityDateRange} onSelect={setActivityDateRange} numberOfMonths={2}/></PopoverContent></Popover>
                              <Button variant="ghost" size="icon" onClick={() => setActivityDateRange(undefined)} disabled={!activityDateRange}><FilterX className="h-4 w-4"/></Button>
+                            <Button variant="outline" className="ml-auto" onClick={() => printElement('hrd-activity-print-area')} disabled={Object.keys(data).length === 0}><Printer className="mr-2"/>Cetak</Button>
                         </div>
                     )}
                     {isLoading ? <div className="flex justify-center items-center h-60"><Loader2 className="animate-spin h-8 w-8 text-primary"/></div> 
@@ -546,6 +549,11 @@ export default function HrdPusatPage() {
 
     return (
         <>
+            <div className="hidden">
+              <div id="hrd-activity-print-area">
+                <HrdActivityPrintLayout data={Object.values(groupedActivities).flat()} title={activeMenu} />
+              </div>
+            </div>
             <Dialog open={isPenaltyPrintPreviewOpen} onOpenChange={setIsPenaltyPrintPreviewOpen}><DialogContent className="max-w-4xl p-0"><DialogHeader className="p-4 border-b no-print"><DialogTitle>Pratinjau Surat Penalti</DialogTitle><DialogClose asChild><Button variant="ghost" size="icon" className="absolute right-4 top-3"><X className="h-4 w-4"/></Button></DialogClose></DialogHeader><div className="p-6 max-h-[80vh] overflow-y-auto" id="printable-penalty"><PenaltyPrintLayout penaltyData={penaltyToPrint} /></div><DialogFooter className="p-4 border-t bg-muted no-print"><Button variant="outline" onClick={() => setIsPenaltyPrintPreviewOpen(false)}>Tutup</Button><Button onClick={() => printElement('printable-penalty')}>Cetak</Button></DialogFooter></DialogContent></Dialog>
             <Dialog open={isRewardPrintPreviewOpen} onOpenChange={setIsRewardPrintPreviewOpen}><DialogContent className="max-w-4xl p-0"><DialogHeader className="p-4 border-b no-print"><DialogTitle>Pratinjau Surat Reward</DialogTitle><DialogClose asChild><Button variant="ghost" size="icon" className="absolute right-4 top-3"><X className="h-4 w-4"/></Button></DialogClose></DialogHeader><div className="p-6 max-h-[80vh] overflow-y-auto" id="printable-reward"><RewardPrintLayout rewardData={rewardToPrint} /></div><DialogFooter className="p-4 border-t bg-muted no-print"><Button variant="outline" onClick={() => setIsRewardPrintPreviewOpen(false)}>Tutup</Button><Button onClick={() => printElement('printable-reward')}>Cetak</Button></DialogFooter></DialogContent></Dialog>
             
