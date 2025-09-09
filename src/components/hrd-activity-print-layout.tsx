@@ -29,6 +29,15 @@ const calculateDuration = (start: any, end: any): string => {
 
 export default function HrdActivityPrintLayout({ data, title }: HrdActivityPrintLayoutProps) {
   const reportDate = format(new Date(), 'EEEE, dd MMMM yyyy', { locale: localeID });
+  
+  const allPhotos = data.flatMap(activity => 
+    [
+        activity.photoInitial && { src: activity.photoInitial, label: `Awal: ${activity.description.substring(0, 30)}...`, timestamp: activity.createdAt },
+        activity.photoInProgress && { src: activity.photoInProgress, label: `Proses: ${activity.description.substring(0, 30)}...`, timestamp: activity.timestampInProgress },
+        activity.photoCompleted && { src: activity.photoCompleted, label: `Selesai: ${activity.description.substring(0, 30)}...`, timestamp: activity.timestampCompleted },
+    ].filter(Boolean)
+  );
+
 
   return (
     <div className="bg-white text-black p-4 font-sans printable-area">
@@ -54,8 +63,7 @@ export default function HrdActivityPrintLayout({ data, title }: HrdActivityPrint
           <thead>
             <tr className="material-table">
               <th className="text-black font-bold border border-black px-2 py-1 text-center text-xs w-[5%]">No</th>
-              <th className="text-black font-bold border border-black px-2 py-1 text-center text-xs w-[15%]">Nama/NIK</th>
-              <th className="text-black font-bold border border-black px-2 py-1 text-center text-xs w-[10%]">Jabatan</th>
+              <th className="text-black font-bold border border-black px-2 py-1 text-center text-xs w-[15%]">Nama Karyawan</th>
               <th className="text-black font-bold border border-black px-2 py-1 text-center text-xs w-[30%]">Deskripsi Kegiatan</th>
               <th className="text-black font-bold border border-black px-2 py-1 text-center text-xs">Mulai</th>
               <th className="text-black font-bold border border-black px-2 py-1 text-center text-xs">Proses</th>
@@ -70,7 +78,6 @@ export default function HrdActivityPrintLayout({ data, title }: HrdActivityPrint
                         <td className="border border-black p-1 text-left text-xs align-top">
                             <p className="font-semibold">{activity.username}</p>
                         </td>
-                        <td className="border border-black p-1 text-center text-xs align-top">{activity.userId}</td>
                         <td className="border border-black p-1 text-left text-xs">{activity.description}</td>
                         <td className="border border-black p-1 text-center text-xs">{safeFormatTimestamp(activity.createdAt, 'HH:mm')}</td>
                         <td className="border border-black p-1 text-center text-xs">{safeFormatTimestamp(activity.timestampInProgress, 'HH:mm')}</td>
@@ -79,11 +86,41 @@ export default function HrdActivityPrintLayout({ data, title }: HrdActivityPrint
                     </tr>
                 ))
              : (
-                <tr><td colSpan={8} className="h-24 text-center">Tidak ada data untuk dicetak.</td></tr>
+                <tr><td colSpan={7} className="h-24 text-center">Tidak ada data untuk dicetak.</td></tr>
             )}
           </tbody>
         </table>
+
+         {allPhotos.length > 0 && (
+          <div className="mt-8" style={{ pageBreakInside: 'avoid' }}>
+            <h3 className="font-bold text-center border-t-2 border-black pt-2 mb-4">LAMPIRAN FOTO KEGIATAN</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
+              {allPhotos.map((photo, index) => (
+                <div key={index} className="text-center" style={{ breakInside: 'avoid' }}>
+                  <img src={photo?.src || ''} alt={photo?.label} className="border border-black w-full" data-ai-hint="activity evidence" />
+                  <p className="text-xs mt-1">
+                    <strong>{photo?.label}</strong>
+                    <br />
+                    <span>{safeFormatTimestamp(photo?.timestamp, 'dd MMM, HH:mm')}</span>
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </main>
+      <footer className="signature-section mt-16">
+          <div>
+              <p>Mengetahui,</p>
+              <div className="signature-box"></div>
+              <p>(Pimpinan)</p>
+          </div>
+          <div>
+              <p>Disiapkan oleh,</p>
+              <div className="signature-box"></div>
+              <p>(HRD Pusat)</p>
+          </div>
+      </footer>
     </div>
   );
 }
