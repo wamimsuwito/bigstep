@@ -35,7 +35,7 @@ export default function HrdActivityPrintLayout({ data, title }: HrdActivityPrint
         activity.photoInitial && { src: activity.photoInitial, label: `Awal: ${activity.description.substring(0, 30)}...`, timestamp: activity.createdAt },
         activity.photoInProgress && { src: activity.photoInProgress, label: `Proses: ${activity.description.substring(0, 30)}...`, timestamp: activity.timestampInProgress },
         activity.photoCompleted && { src: activity.photoCompleted, label: `Selesai: ${activity.description.substring(0, 30)}...`, timestamp: activity.timestampCompleted },
-    ].filter(Boolean)
+    ].filter((photo): photo is { src: string; label: string; timestamp: any; } => !!photo)
   );
 
 
