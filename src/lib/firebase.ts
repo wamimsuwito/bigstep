@@ -6,6 +6,7 @@ import { getFirestore, collection, getDocs, getDoc, setDoc, doc, addDoc, updateD
 const firebaseConfig = {
   apiKey: "AIzaSyDQHD5hWDvY_Jp7kTsvOJ4Yei_fRYVgA3Y",
   authDomain: "batchscale-monitor.firebaseapp.com",
+  databaseURL: "https://batchscale-monitor.firebaseio.com",
   projectId: "batchscale-monitor",
   storageBucket: "batchscale-monitor.firebasestorage.app",
   messagingSenderId: "425726816093",
