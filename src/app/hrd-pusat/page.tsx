@@ -10,7 +10,7 @@ import { Loader2, History, Calendar as CalendarIcon, UserCheck, Eye, LogOut, Shi
 import { useToast } from '@/hooks/use-toast';
 import { format, startOfDay, endOfDay, isWithinInterval, differenceInMinutes, isSameDay, subDays, startOfMonth, endOfMonth, getDaysInMonth, eachDayOfInterval, addMonths, parseISO } from 'date-fns';
 import { id as localeID } from 'date-fns/locale';
-import { db, collection, query, where, getDocs, Timestamp, orderBy, addDoc, limit } from '@/lib/firebase';
+import { db, collection, query, where, getDocs, Timestamp, orderBy, addDoc, limit, onSnapshot } from '@/lib/firebase';
 import type { UserData, LocationData, PenaltyEntry, RewardEntry, AttendanceRecord, ActivityLog, OvertimeRecord, ProductionData } from '@/lib/types';
 import { Sidebar, SidebarProvider, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarInset, SidebarFooter, SidebarTrigger } from '@/components/ui/sidebar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -27,11 +27,11 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Calendar } from '@/components/ui/calendar';
 import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import HrdActivityPrintLayout from '@/components/hrd-activity-print-layout';
 import { DateRange } from 'react-day-picker';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import HrdActivityPrintLayout from '@/components/hrd-activity-print-layout';
 
 
 type ActiveMenu = 'Absensi Hari Ini' | 'Riwayat Absensi' | 'Kegiatan Karyawan Hari Ini' | 'Riwayat Kegiatan Karyawan' | 'Penalti Karyawan' | 'Reward Karyawan';
@@ -150,51 +150,53 @@ export default function HrdPusatPage() {
         }
         setUserInfo(userData);
     }, [router, toast]);
-    
-    const fetchAllData = useCallback(async () => {
-        setIsLoading(true);
-        try {
-            const usersSnap = await getDocs(collection(db, "users"));
-            const allUsersData = usersSnap.docs.map(d => ({ ...d.data(), id: d.id }) as UserData);
-            const excludedJabatan = ['SUPER ADMIN', 'OWNER', 'HRD PUSAT'];
-            setAllUsers(allUsersData.filter(u => u.jabatan && !excludedJabatan.includes(u.jabatan.toUpperCase())));
 
-            const locationsSnap = await getDocs(collection(db, 'locations'));
+    useEffect(() => {
+      if (!userInfo) return;
+  
+      setIsLoading(true);
+      const unsubscribers: (() => void)[] = [];
+  
+      const setupListener = (collectionName: string, setter: React.Dispatch<React.SetStateAction<any[]>>, q?: any) => {
+        const queryRef = q || query(collection(db, collectionName));
+        const unsubscribe = onSnapshot(queryRef, (snapshot) => {
+          const data = snapshot.docs.map(d => ({ ...d.data(), id: d.id }));
+          setter(data);
+        }, (error) => {
+          console.error(`Error fetching ${collectionName}:`, error);
+          toast({ variant: 'destructive', title: `Gagal memuat data ${collectionName}` });
+        });
+        unsubscribers.push(unsubscribe);
+      };
+      
+      // Fetch Locations once
+        getDocs(collection(db, 'locations')).then(locationsSnap => {
             const locationsData = locationsSnap.docs.map(d => ({ ...d.data(), id: d.id }) as LocationData);
             setLocations(locationsData);
             if(locationsData.length > 0 && selectedLocation === 'all') {
                 setSelectedLocation(locationsData[0].name);
             }
+        });
+  
+      setupListener('users', (data) => {
+          const excludedJabatan = ['SUPER ADMIN', 'OWNER', 'HRD PUSAT'];
+          setAllUsers((data as UserData[]).filter(u => u.jabatan && !excludedJabatan.includes(u.jabatan.toUpperCase())));
+      });
+      setupListener('penalties', setPenalties, query(collection(db, 'penalties'), orderBy('createdAt', 'desc')));
+      setupListener('rewards', setRewards, query(collection(db, 'rewards'), orderBy('createdAt', 'desc')));
+      setupListener('absensi', setAllAttendance);
+      setupListener('overtime_absensi', setAllOvertime);
+      setupListener('kegiatan_harian', setAllActivities, query(collection(db, 'kegiatan_harian'), orderBy('createdAt', 'desc')));
+      setupListener('productions', setAllProductions);
+      
+      setIsLoading(false);
+  
+      return () => {
+        unsubscribers.forEach(unsub => unsub());
+      };
+    }, [userInfo, toast, selectedLocation]);
 
-            const [penaltiesSnap, rewardsSnap, attendanceSnap, overtimeSnap, activitiesSnap, productionsSnap] = await Promise.all([
-                getDocs(collection(db, "penalties")),
-                getDocs(collection(db, "rewards")),
-                getDocs(collection(db, "absensi")),
-                getDocs(collection(db, "overtime_absensi")),
-                getDocs(query(collection(db, "kegiatan_harian"), orderBy('createdAt', 'desc'), limit(100))),
-                getDocs(collection(db, "productions"))
-            ]);
-
-            setPenalties(penaltiesSnap.docs.map(d => ({ ...d.data(), id: d.id }) as PenaltyEntry).sort((a,b) => (toValidDate(b.createdAt)?.getTime() || 0) - (toValidDate(a.createdAt)?.getTime() || 0)));
-            setRewards(rewardsSnap.docs.map(d => ({ ...d.data(), id: d.id }) as RewardEntry).sort((a,b) => (toValidDate(b.createdAt)?.getTime() || 0) - (toValidDate(a.createdAt)?.getTime() || 0)));
-            setAllAttendance(attendanceSnap.docs.map(d => ({...d.data(), id: d.id}) as AttendanceRecord));
-            setAllOvertime(overtimeSnap.docs.map(d => ({...d.data(), id: d.id}) as OvertimeRecord));
-            setAllActivities(activitiesSnap.docs.map(d => ({ ...d.data(), id: d.id }) as ActivityLog));
-            setAllProductions(productionsSnap.docs.map(d => ({ ...d.data(), id: d.id }) as ProductionData));
-
-        } catch (error) {
-            console.error("Failed to fetch initial data:", error);
-            toast({ title: 'Gagal Memuat Data', variant: 'destructive' });
-        } finally {
-            setIsLoading(false);
-        }
-    }, [toast, selectedLocation]);
-
-
-    useEffect(() => {
-        if (userInfo) { fetchAllData(); }
-    }, [userInfo, fetchAllData]);
-
+    
     const { todayAttendance } = useMemo(() => {
         const selectedDayStart = startOfDay(selectedDate);
         
@@ -366,8 +368,7 @@ export default function HrdPusatPage() {
         };
 
         try {
-            const docRef = await addDoc(collection(db, 'penalties'), newPenalty);
-            setPenalties(prev => [{ id: docRef.id, ...newPenalty } as PenaltyEntry, ...prev]);
+            await addDoc(collection(db, 'penalties'), newPenalty);
             toast({ title: 'Penalti Disimpan' });
             setSelectedPenaltyUser(null); setPenaltyPoin(''); setPenaltyValue(''); setPenaltyCause(''); setPenaltyDescription('');
         } catch (error) { toast({ title: 'Gagal Menyimpan', variant: 'destructive' }); } finally { setIsSubmittingPenalty(false); }
@@ -383,8 +384,7 @@ export default function HrdPusatPage() {
         };
 
         try {
-            const docRef = await addDoc(collection(db, 'rewards'), newReward);
-            setRewards(prev => [{ id: docRef.id, ...newReward } as RewardEntry, ...prev]);
+            await addDoc(collection(db, 'rewards'), newReward);
             toast({ title: 'Reward Disimpan' });
             setSelectedRewardUser(null); setRewardPoin(''); setRewardValue(''); setRewardDescription('');
         } catch (error) { toast({ title: 'Gagal Menyimpan', variant: 'destructive' }); } finally { setIsSubmittingReward(false); }
@@ -461,13 +461,14 @@ export default function HrdPusatPage() {
             const summary = activities.reduce((acc, act) => { const statusKey = act.status || 'unknown'; acc[statusKey] = (acc[statusKey] || 0) + 1; return acc; }, {} as Record<string, number>);
             return (<div className="flex gap-2 text-xs">{summary.completed > 0 && <Badge variant="secondary" className="bg-green-100 text-green-800">{summary.completed} Selesai</Badge>}{summary.in_progress > 0 && <Badge variant="secondary" className="bg-blue-100 text-blue-800">{summary.in_progress} Proses</Badge>}{summary.pending > 0 && <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">{summary.pending} Menunggu</Badge>}</div>)
         };
+        const printData = Object.values(data);
         return (<Card><CardHeader><CardTitle>{title}</CardTitle><CardDescription>{title === 'Riwayat Kegiatan Karyawan' ? 'Lihat semua aktivitas yang pernah dilaporkan.' : 'Aktivitas yang dilaporkan hari ini, dikelompokkan per karyawan.'}</CardDescription></CardHeader>
                 <CardContent>
                     {title === 'Riwayat Kegiatan Karyawan' && (
                         <div className="flex items-center gap-2 mb-4">
                             <Popover><PopoverTrigger asChild><Button variant="outline" className={cn("w-[280px] justify-start text-left font-normal", !activityDateRange && "text-muted-foreground" )}><CalendarIcon className="mr-2 h-4 w-4" />{activityDateRange?.from ? ( activityDateRange.to ? (<>{format(activityDateRange.from, "LLL dd, y")} - {format(activityDateRange.to, "LLL dd, y")}</>) : (format(activityDateRange.from, "LLL dd, y"))) : (<span>Pilih rentang tanggal</span>)}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="range" selected={activityDateRange} onSelect={setActivityDateRange} numberOfMonths={2}/></PopoverContent></Popover>
                              <Button variant="ghost" size="icon" onClick={() => setActivityDateRange(undefined)} disabled={!activityDateRange}><FilterX className="h-4 w-4"/></Button>
-                            <Button variant="outline" className="ml-auto" onClick={() => printElement('hrd-activity-print-area')} disabled={Object.keys(data).length === 0}><Printer className="mr-2"/>Cetak</Button>
+                            <Button variant="outline" className="ml-auto" onClick={() => printElement('hrd-activity-print-area')} disabled={printData.length === 0}><Printer className="mr-2"/>Cetak</Button>
                         </div>
                     )}
                     {isLoading ? <div className="flex justify-center items-center h-60"><Loader2 className="animate-spin h-8 w-8 text-primary"/></div> 
@@ -559,7 +560,7 @@ export default function HrdPusatPage() {
         <>
             <div className="hidden">
               <div id="hrd-activity-print-area">
-                <HrdActivityPrintLayout data={Object.values(groupedActivities)} title={activeMenu} currentUser={userInfo}/>
+                 <HrdActivityPrintLayout data={Object.values(groupedActivities)} title={activeMenu} currentUser={userInfo} />
               </div>
             </div>
             <Dialog open={isPenaltyPrintPreviewOpen} onOpenChange={setIsPenaltyPrintPreviewOpen}><DialogContent className="max-w-4xl p-0"><DialogHeader className="p-4 border-b no-print"><DialogTitle>Pratinjau Surat Penalti</DialogTitle><DialogClose asChild><Button variant="ghost" size="icon" className="absolute right-4 top-3"><X className="h-4 w-4"/></Button></DialogClose></DialogHeader><div className="p-6 max-h-[80vh] overflow-y-auto" id="printable-penalty"><PenaltyPrintLayout penaltyData={penaltyToPrint} /></div><DialogFooter className="p-4 border-t bg-muted no-print"><Button variant="outline" onClick={() => setIsPenaltyPrintPreviewOpen(false)}>Tutup</Button><Button onClick={() => printElement('printable-penalty')}>Cetak</Button></DialogFooter></DialogContent></Dialog>
