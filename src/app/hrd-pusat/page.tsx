@@ -10,7 +10,7 @@ import { Loader2, History, Calendar as CalendarIcon, UserCheck, Eye, LogOut, Shi
 import { useToast } from '@/hooks/use-toast';
 import { format, startOfDay, endOfDay, isWithinInterval, differenceInMinutes, isSameDay, subDays, startOfMonth, endOfMonth, getDaysInMonth, eachDayOfInterval, addMonths, parseISO } from 'date-fns';
 import { id as localeID } from 'date-fns/locale';
-import { db, collection, query, where, getDocs, Timestamp, orderBy, addDoc, limit, onSnapshot } from '@/lib/firebase';
+import { db, collection, query, where, getDocs, Timestamp, orderBy, addDoc, limit, onSnapshot, QuerySnapshot, FirestoreError } from '@/lib/firebase';
 import type { UserData, LocationData, PenaltyEntry, RewardEntry, AttendanceRecord, ActivityLog, OvertimeRecord, ProductionData } from '@/lib/types';
 import { Sidebar, SidebarProvider, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarInset, SidebarFooter, SidebarTrigger } from '@/components/ui/sidebar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -159,10 +159,10 @@ export default function HrdPusatPage() {
   
       const setupListener = (collectionName: string, setter: React.Dispatch<React.SetStateAction<any[]>>, q?: any) => {
         const queryRef = q || query(collection(db, collectionName));
-        const unsubscribe = onSnapshot(queryRef, (snapshot) => {
+        const unsubscribe = onSnapshot(queryRef, (snapshot: QuerySnapshot) => {
           const data = snapshot.docs.map(d => ({ ...d.data(), id: d.id }));
           setter(data);
-        }, (error) => {
+        }, (error: FirestoreError) => {
           console.error(`Error fetching ${collectionName}:`, error);
           toast({ variant: 'destructive', title: `Gagal memuat data ${collectionName}` });
         });
