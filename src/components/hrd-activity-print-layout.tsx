@@ -4,7 +4,7 @@
 import * as React from 'react';
 import type { ActivityLog, UserData } from '@/lib/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { format, formatDistanceStrict } from 'date-fns';
+import { format, formatDistanceStrict, isAfter } from 'date-fns';
 import { id as localeID } from 'date-fns/locale';
 
 interface HrdActivityPrintLayoutProps {
@@ -13,19 +13,50 @@ interface HrdActivityPrintLayoutProps {
   currentUser: UserData | null;
 }
 
+const toValidDate = (timestamp: any): Date | null => {
+    if (!timestamp) return null;
+    if (timestamp.toDate) return timestamp.toDate();
+    if (typeof timestamp === 'string' || typeof timestamp === 'number') {
+        const date = new Date(timestamp);
+        return isNaN(date.getTime()) ? null : date;
+    }
+    return null;
+};
+
+
 const safeFormatTimestamp = (timestamp: any, formatString: string) => {
-    if (!timestamp) return '-';
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    if (isNaN(date.getTime())) return '-';
-    return format(date, formatString, { locale: localeID });
+    const date = toValidDate(timestamp);
+    if (!date) return '-';
+    try {
+        return format(date, formatString, { locale: localeID });
+    } catch (error) {
+        return '-';
+    }
 };
 
 const calculateDuration = (start: any, end: any): string => {
     if (!start || !end) return '-';
-    const startDate = start.toDate ? start.toDate() : new Date(start);
-    const endDate = end.toDate ? end.toDate() : new Date(end);
-    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return '-';
+    const startDate = toValidDate(start);
+    const endDate = toValidDate(end);
+    if (!startDate || !endDate) return '-';
     return formatDistanceStrict(endDate, startDate, { locale: localeID });
+};
+
+const CompletionStatus = ({ activity }: { activity: ActivityLog }) => {
+    const target = toValidDate(activity.targetTimestamp);
+    const completed = toValidDate(activity.timestampCompleted);
+
+    if (!target || !completed) {
+        return null;
+    }
+
+    if (isAfter(completed, target)) {
+        return <p className="font-bold text-red-600">TERLAMBAT</p>;
+    } else if (isAfter(target, completed)) {
+        return <p className="font-bold">LEBIH CEPAT</p>;
+    } else {
+        return <p className="font-bold">TEPAT WAKTU</p>;
+    }
 };
 
 const PhotoCell = ({ src, timestamp }: { src?: string | null, timestamp: any }) => {
@@ -43,7 +74,9 @@ const PhotoCell = ({ src, timestamp }: { src?: string | null, timestamp: any }) 
                     <span className="text-[8px] mt-1">{safeFormatTimestamp(timestamp, 'HH:mm:ss')}</span>
                 </>
             ) : (
-                <span>-</span>
+                <div style={{ width: '50mm', height: '50mm' }} className="flex items-center justify-center border border-dashed border-gray-400">
+                    <span className="text-[9px] text-gray-500">- Foto -</span>
+                </div>
             )}
         </div>
     );
@@ -101,13 +134,13 @@ export default function HrdActivityPrintLayout({ data, title, currentUser }: Hrd
           <tbody>
             {data.flatMap((user, userIndex) =>
                 (user.activities && user.activities.length > 0) ? user.activities.map((activity, activityIndex) => {
-                    const nik = user.nik;
                     return (
                         <tr key={`${user.id}-${activity.id}`} className="report-wrapper">
                             <td className="border border-black p-1 text-center text-xs align-top">{activityIndex + 1}</td>
                             <td className="border border-black p-1 text-left text-xs align-top">
                                 <p className="font-semibold">{activity.username}</p>
-                                <p>{nik}</p>
+                                <p>{user.nik}</p>
+                                <p>{user.jabatan}</p>
                             </td>
                             <td className="border border-black p-1 text-left text-xs align-top">
                                 <p>{activity.description}</p>
@@ -116,6 +149,9 @@ export default function HrdActivityPrintLayout({ data, title, currentUser }: Hrd
                                     <p>Realisasi Mulai: {safeFormatTimestamp(activity.createdAt, 'dd/MM HH:mm')}</p>
                                     <p>Target Selesai: {safeFormatTimestamp(activity.targetTimestamp, 'dd/MM HH:mm')}</p>
                                     <p>Realisasi Selesai: {safeFormatTimestamp(activity.timestampCompleted, 'dd/MM HH:mm')}</p>
+                                </div>
+                                <div className="mt-2 text-[10px]">
+                                     <CompletionStatus activity={activity} />
                                 </div>
                             </td>
                             <td className="border border-black p-1 text-center text-xs"><PhotoCell src={activity.photoInitial} timestamp={activity.createdAt} /></td>
