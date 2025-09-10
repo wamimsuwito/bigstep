@@ -17,6 +17,7 @@ export default function WeightIndicator({ scale, isPouring }: WeightIndicatorPro
   
   const displayWeight = weight.toFixed(0);
   const progressValue = target > 0 ? (weight / target) * 100 : 0;
+  const displayTarget = Math.round(target);
 
   return (
     <Card>
@@ -37,7 +38,7 @@ export default function WeightIndicator({ scale, isPouring }: WeightIndicatorPro
                 )}>{unit}</span>
             </div>
             <Progress value={progressValue} className="h-1.5 bg-secondary" indicatorClassName="bg-primary"/>
-            <p className="text-center text-muted-foreground mt-2 text-xs">Target: {target} {unit}</p>
+            <p className="text-center text-muted-foreground mt-2 text-xs">Target: {displayTarget} {unit}</p>
         </CardContent>
     </Card>
   );
