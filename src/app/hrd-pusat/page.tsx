@@ -7,11 +7,11 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Loader2, History, Calendar as CalendarIcon, UserCheck, Eye, LogOut, ShieldX, Star, Activity, Users, Clock, FilterX, ClipboardList, Camera, X, Printer, UserSearch, Briefcase } from 'lucide-react';
+import type { QuerySnapshot, FirestoreError } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { format, startOfDay, endOfDay, isWithinInterval, differenceInMinutes, isSameDay, subDays, startOfMonth, endOfMonth, getDaysInMonth, eachDayOfInterval, addMonths, parseISO } from 'date-fns';
 import { id as localeID } from 'date-fns/locale';
 import { db, collection, query, where, getDocs, Timestamp, orderBy, addDoc, limit, onSnapshot } from '@/lib/firebase';
-import type { QuerySnapshot, FirestoreError } from 'firebase/firestore';
 import type { UserData, LocationData, PenaltyEntry, RewardEntry, AttendanceRecord, ActivityLog, OvertimeRecord, ProductionData } from '@/lib/types';
 import { Sidebar, SidebarProvider, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarInset, SidebarFooter, SidebarTrigger } from '@/components/ui/sidebar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -131,6 +131,8 @@ export default function HrdPusatPage() {
 
     // Activity Filter States
     const [activityDateRange, setActivityDateRange] = useState<DateRange | undefined>();
+    const [activitySearchTerm, setActivitySearchTerm] = useState('');
+
 
     // Attendance History Filter States
     const [historyDateRange, setHistoryDateRange] = useState<DateRange | undefined>(getThisPeriod());
@@ -271,6 +273,12 @@ export default function HrdPusatPage() {
              });
         }
         
+        if (activitySearchTerm) {
+            const lowercasedFilter = activitySearchTerm.toLowerCase();
+            const filteredUserIds = new Set(allUsers.filter(u => u.username.toLowerCase().includes(lowercasedFilter) || u.nik.toLowerCase().includes(lowercasedFilter)).map(u => u.id));
+            dataToGroup = dataToGroup.filter(activity => filteredUserIds.has(activity.userId));
+        }
+
         return dataToGroup.reduce((acc, activity) => {
             const key = activity.userId;
             if (!acc[key]) {
@@ -284,7 +292,7 @@ export default function HrdPusatPage() {
             }
             return acc;
         }, {} as Record<string, UserData & { activities: ActivityLog[] }>);
-    }, [allActivities, activityDateRange, activeMenu, allUsers]);
+    }, [allActivities, activityDateRange, activeMenu, allUsers, activitySearchTerm]);
 
 
     const { filteredHistoryRecords, historySummary } = useMemo(() => {
@@ -466,9 +474,15 @@ export default function HrdPusatPage() {
         return (<Card><CardHeader><CardTitle>{title}</CardTitle><CardDescription>{title === 'Riwayat Kegiatan Karyawan' ? 'Lihat semua aktivitas yang pernah dilaporkan.' : 'Aktivitas yang dilaporkan hari ini, dikelompokkan per karyawan.'}</CardDescription></CardHeader>
                 <CardContent>
                     {title === 'Riwayat Kegiatan Karyawan' && (
-                        <div className="flex items-center gap-2 mb-4">
-                            <Popover><PopoverTrigger asChild><Button variant="outline" className={cn("w-[280px] justify-start text-left font-normal", !activityDateRange && "text-muted-foreground" )}><CalendarIcon className="mr-2 h-4 w-4" />{activityDateRange?.from ? ( activityDateRange.to ? (<>{format(activityDateRange.from, "LLL dd, y")} - {format(activityDateRange.to, "LLL dd, y")}</>) : (format(activityDateRange.from, "LLL dd, y"))) : (<span>Pilih rentang tanggal</span>)}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="range" selected={activityDateRange} onSelect={setActivityDateRange} numberOfMonths={2}/></PopoverContent></Popover>
-                             <Button variant="ghost" size="icon" onClick={() => setActivityDateRange(undefined)} disabled={!activityDateRange}><FilterX className="h-4 w-4"/></Button>
+                        <div className="flex flex-col md:flex-row gap-2 mb-4">
+                            <Input 
+                                placeholder="Cari berdasarkan nama atau NIK..."
+                                value={activitySearchTerm}
+                                onChange={e => setActivitySearchTerm(e.target.value)}
+                                className='w-full md:w-auto'
+                            />
+                            <Popover><PopoverTrigger asChild><Button variant="outline" className={cn("w-full md:w-[280px] justify-start text-left font-normal", !activityDateRange && "text-muted-foreground" )}><CalendarIcon className="mr-2 h-4 w-4" />{activityDateRange?.from ? ( activityDateRange.to ? (<>{format(activityDateRange.from, "LLL dd, y")} - {format(activityDateRange.to, "LLL dd, y")}</>) : (format(activityDateRange.from, "LLL dd, y"))) : (<span>Pilih rentang tanggal</span>)}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="range" selected={activityDateRange} onSelect={setActivityDateRange} numberOfMonths={2}/></PopoverContent></Popover>
+                             <Button variant="ghost" size="icon" onClick={() => {setActivityDateRange(undefined); setActivitySearchTerm('');}} disabled={!activityDateRange && !activitySearchTerm}><FilterX className="h-4 w-4"/></Button>
                             <Button variant="outline" className="ml-auto" onClick={() => printElement('hrd-activity-print-area')} disabled={printData.length === 0}><Printer className="mr-2"/>Cetak</Button>
                         </div>
                     )}
