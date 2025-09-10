@@ -2,13 +2,14 @@
 'use client';
 
 import * as React from 'react';
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Loader2, User, LogOut, Fingerprint, Briefcase, LayoutDashboard, Users, Database, History, ClipboardList, AlertTriangle, Printer, Eye, Camera, UserPlus, MapPin, Save, Calendar as CalendarIcon, FilterX, Clock } from 'lucide-react';
 import type { UserData, AttendanceRecord, ActivityLog, OvertimeRecord, ProductionData, Report } from '@/lib/types';
 import { db, collection, query, where, getDocs, onSnapshot, doc, updateDoc, Timestamp, setDoc, getDoc, orderBy } from '@/lib/firebase';
+import type { QuerySnapshot, FirestoreError } from 'firebase/firestore';
 import { Sidebar, SidebarProvider, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarInset, SidebarFooter, SidebarTrigger } from '@/components/ui/sidebar';
 import { useToast } from '@/hooks/use-toast';
 import { format, isSameDay, startOfToday, formatDistanceStrict, isAfter, subDays, startOfDay, endOfDay, isWithinInterval, parseISO, isDate, differenceInMinutes, differenceInDays, subHours } from 'date-fns';

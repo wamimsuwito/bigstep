@@ -10,7 +10,8 @@ import { Loader2, History, Calendar as CalendarIcon, UserCheck, Eye, LogOut, Shi
 import { useToast } from '@/hooks/use-toast';
 import { format, startOfDay, endOfDay, isWithinInterval, differenceInMinutes, isSameDay, subDays, startOfMonth, endOfMonth, getDaysInMonth, eachDayOfInterval, addMonths, parseISO } from 'date-fns';
 import { id as localeID } from 'date-fns/locale';
-import { db, collection, query, where, getDocs, Timestamp, orderBy, addDoc, limit, onSnapshot, QuerySnapshot, FirestoreError } from '@/lib/firebase';
+import { db, collection, query, where, getDocs, Timestamp, orderBy, addDoc, limit, onSnapshot } from '@/lib/firebase';
+import type { QuerySnapshot, FirestoreError } from 'firebase/firestore';
 import type { UserData, LocationData, PenaltyEntry, RewardEntry, AttendanceRecord, ActivityLog, OvertimeRecord, ProductionData } from '@/lib/types';
 import { Sidebar, SidebarProvider, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarInset, SidebarFooter, SidebarTrigger } from '@/components/ui/sidebar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -560,7 +561,7 @@ export default function HrdPusatPage() {
         <>
             <div className="hidden">
               <div id="hrd-activity-print-area">
-                 <HrdActivityPrintLayout data={Object.values(groupedActivities)} title={activeMenu} currentUser={userInfo} />
+                <HrdActivityPrintLayout data={Object.values(groupedActivities)} title={activeMenu} currentUser={userInfo} />
               </div>
             </div>
             <Dialog open={isPenaltyPrintPreviewOpen} onOpenChange={setIsPenaltyPrintPreviewOpen}><DialogContent className="max-w-4xl p-0"><DialogHeader className="p-4 border-b no-print"><DialogTitle>Pratinjau Surat Penalti</DialogTitle><DialogClose asChild><Button variant="ghost" size="icon" className="absolute right-4 top-3"><X className="h-4 w-4"/></Button></DialogClose></DialogHeader><div className="p-6 max-h-[80vh] overflow-y-auto" id="printable-penalty"><PenaltyPrintLayout penaltyData={penaltyToPrint} /></div><DialogFooter className="p-4 border-t bg-muted no-print"><Button variant="outline" onClick={() => setIsPenaltyPrintPreviewOpen(false)}>Tutup</Button><Button onClick={() => printElement('printable-penalty')}>Cetak</Button></DialogFooter></DialogContent></Dialog>
