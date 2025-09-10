@@ -19,7 +19,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { printElement, cn } from '@/lib/utils';
 import HseAttendancePrintLayout from '@/components/hse-attendance-print-layout';
-import HseActivityPrintLayout from '@/components/hse-activity-print-layout';
+import HrdActivityPrintLayout from '@/components/hrd-activity-print-layout';
 import AttendanceHistoryPrintLayout from '@/components/attendance-history-print-layout';
 import AttendanceTable from '@/components/attendance-table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
@@ -251,7 +251,7 @@ const AttendanceHistoryComponent = ({ users, allAttendance, allOvertime }: { use
 };
 
 
-const DailyActivitiesComponent = ({ location }: { location: string }) => {
+const DailyActivitiesComponent = ({ location, currentUser }: { location: string, currentUser: UserData | null }) => {
     const [combinedData, setCombinedData] = useState<(UserData & { activities?: ActivityLog[] })[]>([]);
     const [isDataLoading, setIsDataLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -321,7 +321,7 @@ const DailyActivitiesComponent = ({ location }: { location: string }) => {
         <>
             <div className="hidden">
                 <div id="hse-activity-print-area">
-                    <HseActivityPrintLayout data={filteredCombinedData} location={location} />
+                    <HrdActivityPrintLayout data={filteredCombinedData} location={location} currentUser={currentUser} />
                 </div>
             </div>
              <Card>
@@ -650,7 +650,7 @@ export default function HseK3Page() {
         case 'Database Absensi':
             return <AttendanceHistoryComponent users={usersInLocation} allAttendance={allAttendance} allOvertime={allOvertime} />;
         case 'Kegiatan Harian':
-            return <DailyActivitiesComponent location={userInfo.lokasi || ''} />;
+            return <DailyActivitiesComponent location={userInfo.lokasi || ''} currentUser={userInfo} />;
         case 'Database Kegiatan':
              return <ActivityHistoryComponent allActivities={allActivities} users={usersInLocation} location={userInfo.lokasi || ''} />;
         case 'Jumlah Karyawan Hari Ini':

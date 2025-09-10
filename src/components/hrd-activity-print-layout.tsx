@@ -9,7 +9,8 @@ import { id as localeID } from 'date-fns/locale';
 
 interface HrdActivityPrintLayoutProps {
   data: (UserData & { activities?: ActivityLog[] })[];
-  title: string;
+  title?: string;
+  location?: string;
   currentUser: UserData | null;
 }
 
@@ -53,7 +54,7 @@ const CompletionStatus = ({ activity }: { activity: ActivityLog }) => {
     if (isAfter(completed, target)) {
         return <p className="font-bold text-red-600">TERLAMBAT</p>;
     } else if (isAfter(target, completed)) {
-        return <p className="font-bold">LEBIH CEPAT</p>;
+        return <p className="font-bold text-green-600">LEBIH CEPAT</p>;
     } else {
         return <p className="font-bold">TEPAT WAKTU</p>;
     }
@@ -83,7 +84,7 @@ const PhotoCell = ({ src, timestamp }: { src?: string | null, timestamp: any }) 
 };
 
 
-export default function HrdActivityPrintLayout({ data, title, currentUser }: HrdActivityPrintLayoutProps) {
+export default function HrdActivityPrintLayout({ data, title, location, currentUser }: HrdActivityPrintLayoutProps) {
   const reportDate = format(new Date(), 'EEEE, dd MMMM yyyy', { locale: localeID });
   
   return (
@@ -113,9 +114,9 @@ export default function HrdActivityPrintLayout({ data, title, currentUser }: Hrd
             <div style={{ clear: 'both' }}></div>
         </header>
         <hr className="border-t-2 border-black my-2" />
-        <h2 className="text-center font-bold text-lg uppercase my-4">{title}</h2>
+        <h2 className="text-center font-bold text-lg uppercase my-4">{title || 'Laporan Kegiatan Harian'}</h2>
         <p className="report-date text-center text-sm mb-4">
-          Tanggal Cetak: {reportDate}
+          {location ? `Lokasi: ${location} - ` : ''}Tanggal Cetak: {reportDate}
         </p>
 
       <main>
