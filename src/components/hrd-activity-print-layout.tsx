@@ -8,8 +8,8 @@ import { format, formatDistanceStrict } from 'date-fns';
 import { id as localeID } from 'date-fns/locale';
 
 interface HrdActivityPrintLayoutProps {
-  data: ActivityLog[];
-  title: string;
+  data: (UserData & { activities?: ActivityLog[] })[];
+  location: string;
   currentUser: UserData | null;
 }
 
@@ -37,7 +37,7 @@ const PhotoCell = ({ src, timestamp }: { src?: string | null, timestamp: any }) 
                         src={src} 
                         alt="Foto Kegiatan" 
                         className="photo-evidence"
-                        style={{ width: '50mm', height: '50mm', objectFit: 'cover', border: '1px solid black' }}
+                        style={{ width: '45mm', height: '45mm', objectFit: 'cover', border: '1px solid black' }}
                         data-ai-hint="activity evidence"
                     />
                     <span className="text-[8px] mt-1">{safeFormatTimestamp(timestamp, 'HH:mm:ss')}</span>
@@ -50,7 +50,7 @@ const PhotoCell = ({ src, timestamp }: { src?: string | null, timestamp: any }) 
 };
 
 
-export default function HrdActivityPrintLayout({ data, title, currentUser }: HrdActivityPrintLayoutProps) {
+export default function HrdActivityPrintLayout({ data, currentUser }: HrdActivityPrintLayoutProps) {
   const reportDate = format(new Date(), 'EEEE, dd MMMM yyyy', { locale: localeID });
   
   return (
@@ -58,9 +58,13 @@ export default function HrdActivityPrintLayout({ data, title, currentUser }: Hrd
         <style jsx global>{`
             @media print {
                 .photo-evidence {
-                    width: 50mm !important;
-                    height: 50mm !important;
+                    width: 45mm !important;
+                    height: 45mm !important;
                     object-fit: cover !important;
+                }
+                .report-wrapper {
+                    break-inside: avoid;
+                    page-break-inside: avoid;
                 }
             }
         `}</style>
@@ -76,7 +80,7 @@ export default function HrdActivityPrintLayout({ data, title, currentUser }: Hrd
             <div style={{ clear: 'both' }}></div>
         </header>
         <hr className="border-t-2 border-black my-2" />
-        <h2 className="text-center font-bold text-lg uppercase my-4">{title}</h2>
+        <h2 className="text-center font-bold text-lg uppercase my-4">RIWAYAT KEGIATAN KARYAWAN</h2>
         <p className="report-date text-center text-sm mb-4">
           Tanggal Cetak: {reportDate}
         </p>
@@ -85,39 +89,53 @@ export default function HrdActivityPrintLayout({ data, title, currentUser }: Hrd
         <table className="material-table w-full">
           <thead>
             <tr className="material-table">
-              <th className="text-black font-bold border border-black px-2 py-1 text-center text-xs w-[5%]">No</th>
-              <th className="text-black font-bold border border-black px-2 py-1 text-center text-xs w-[15%]">Nama Karyawan</th>
-              <th className="text-black font-bold border border-black px-2 py-1 text-center text-xs w-[30%]">Deskripsi Kegiatan</th>
-              <th className="text-black font-bold border border-black px-2 py-1 text-center text-xs">Mulai</th>
-              <th className="text-black font-bold border border-black px-2 py-1 text-center text-xs">Proses</th>
-              <th className="text-black font-bold border border-black px-2 py-1 text-center text-xs">Selesai</th>
-              <th className="text-black font-bold border border-black px-2 py-1 text-center text-xs">Durasi</th>
+              <th className="text-black font-bold border border-black px-1 py-1 text-center text-xs w-[3%]">No</th>
+              <th className="text-black font-bold border border-black px-1 py-1 text-center text-xs w-[12%]">Nama Karyawan</th>
+              <th className="text-black font-bold border border-black px-1 py-1 text-center text-xs w-[25%]">Deskripsi Kegiatan</th>
+              <th className="text-black font-bold border border-black px-1 py-1 text-center text-xs">Mulai</th>
+              <th className="text-black font-bold border border-black px-1 py-1 text-center text-xs">Proses</th>
+              <th className="text-black font-bold border border-black px-1 py-1 text-center text-xs">Selesai</th>
+              <th className="text-black font-bold border border-black px-1 py-1 text-center text-xs w-[8%]">Durasi</th>
             </tr>
           </thead>
           <tbody>
-            {data.length > 0 ? data.map((activity, index) => (
-                    <tr key={activity.id}>
-                        <td className="border border-black p-1 text-center text-xs align-top">{index + 1}</td>
-                        <td className="border border-black p-1 text-left text-xs align-top">
-                            <p className="font-semibold">{activity.username}</p>
-                        </td>
-                        <td className="border border-black p-1 text-left text-xs">{activity.description}</td>
-                        <td className="border border-black p-1 text-center text-xs"><PhotoCell src={activity.photoInitial} timestamp={activity.createdAt} /></td>
-                        <td className="border border-black p-1 text-center text-xs"><PhotoCell src={activity.photoInProgress} timestamp={activity.timestampInProgress} /></td>
-                        <td className="border border-black p-1 text-center text-xs"><PhotoCell src={activity.photoCompleted} timestamp={activity.timestampCompleted} /></td>
-                        <td className="border border-black p-1 text-center text-xs align-top">{calculateDuration(activity.createdAt, activity.timestampCompleted)}</td>
-                    </tr>
-                ))
-             : (
+            {data.flatMap((user, userIndex) =>
+                (user.activities && user.activities.length > 0) ? user.activities.map((activity, activityIndex) => {
+                    const nik = user.nik;
+                    return (
+                        <tr key={`${user.id}-${activity.id}`} className="report-wrapper">
+                            <td className="border border-black p-1 text-center text-xs align-top">{activityIndex + 1}</td>
+                            <td className="border border-black p-1 text-left text-xs align-top">
+                                <p className="font-semibold">{activity.username}</p>
+                                <p>{nik}</p>
+                            </td>
+                            <td className="border border-black p-1 text-left text-xs align-top">
+                                <p>{activity.description}</p>
+                                <div className='mt-2 pt-1 border-t border-black/20 text-[9px]'>
+                                    <p>Target Mulai: {safeFormatTimestamp(activity.createdAt, 'dd/MM HH:mm')}</p>
+                                    <p>Realisasi Mulai: {safeFormatTimestamp(activity.createdAt, 'dd/MM HH:mm')}</p>
+                                    <p>Target Selesai: {safeFormatTimestamp(activity.targetTimestamp, 'dd/MM HH:mm')}</p>
+                                    <p>Realisasi Selesai: {safeFormatTimestamp(activity.timestampCompleted, 'dd/MM HH:mm')}</p>
+                                </div>
+                            </td>
+                            <td className="border border-black p-1 text-center text-xs"><PhotoCell src={activity.photoInitial} timestamp={activity.createdAt} /></td>
+                            <td className="border border-black p-1 text-center text-xs"><PhotoCell src={activity.photoInProgress} timestamp={activity.timestampInProgress} /></td>
+                            <td className="border border-black p-1 text-center text-xs"><PhotoCell src={activity.photoCompleted} timestamp={activity.timestampCompleted} /></td>
+                            <td className="border border-black p-1 text-center text-xs align-top">{calculateDuration(activity.createdAt, activity.timestampCompleted)}</td>
+                        </tr>
+                    );
+                }) : []
+            )}
+            {data.length === 0 && (
                 <tr><td colSpan={7} className="h-24 text-center">Tidak ada data untuk dicetak.</td></tr>
             )}
           </tbody>
         </table>
       </main>
-      <footer className="signature-section mt-16">
+      <footer className="signature-section mt-16" style={{ pageBreakInside: 'avoid', pageBreakBefore: 'auto' }}>
           <div className="text-center">
               <p>Dibuat oleh,</p>
-              <div className="signature-box"></div>
+              <div className="signature-box h-20"></div>
               <p className='font-bold underline'>({currentUser?.username || '.........................'})</p>
               <p>{currentUser?.jabatan || '.........................'}</p>
           </div>
@@ -125,3 +143,4 @@ export default function HrdActivityPrintLayout({ data, title, currentUser }: Hrd
     </div>
   );
 }
+
