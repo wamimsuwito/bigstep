@@ -9,7 +9,7 @@ import { id as localeID } from 'date-fns/locale';
 
 interface HrdActivityPrintLayoutProps {
   data: (UserData & { activities?: ActivityLog[] })[];
-  location: string;
+  title: string;
   currentUser: UserData | null;
 }
 
@@ -37,7 +37,7 @@ const PhotoCell = ({ src, timestamp }: { src?: string | null, timestamp: any }) 
                         src={src} 
                         alt="Foto Kegiatan" 
                         className="photo-evidence"
-                        style={{ width: '45mm', height: '45mm', objectFit: 'cover', border: '1px solid black' }}
+                        style={{ width: '50mm', height: '50mm', objectFit: 'cover', border: '1px solid black' }}
                         data-ai-hint="activity evidence"
                     />
                     <span className="text-[8px] mt-1">{safeFormatTimestamp(timestamp, 'HH:mm:ss')}</span>
@@ -50,7 +50,7 @@ const PhotoCell = ({ src, timestamp }: { src?: string | null, timestamp: any }) 
 };
 
 
-export default function HrdActivityPrintLayout({ data, currentUser }: HrdActivityPrintLayoutProps) {
+export default function HrdActivityPrintLayout({ data, title, currentUser }: HrdActivityPrintLayoutProps) {
   const reportDate = format(new Date(), 'EEEE, dd MMMM yyyy', { locale: localeID });
   
   return (
@@ -58,8 +58,8 @@ export default function HrdActivityPrintLayout({ data, currentUser }: HrdActivit
         <style jsx global>{`
             @media print {
                 .photo-evidence {
-                    width: 45mm !important;
-                    height: 45mm !important;
+                    width: 50mm !important;
+                    height: 50mm !important;
                     object-fit: cover !important;
                 }
                 .report-wrapper {
@@ -80,7 +80,7 @@ export default function HrdActivityPrintLayout({ data, currentUser }: HrdActivit
             <div style={{ clear: 'both' }}></div>
         </header>
         <hr className="border-t-2 border-black my-2" />
-        <h2 className="text-center font-bold text-lg uppercase my-4">RIWAYAT KEGIATAN KARYAWAN</h2>
+        <h2 className="text-center font-bold text-lg uppercase my-4">{title}</h2>
         <p className="report-date text-center text-sm mb-4">
           Tanggal Cetak: {reportDate}
         </p>
@@ -143,4 +143,3 @@ export default function HrdActivityPrintLayout({ data, currentUser }: HrdActivit
     </div>
   );
 }
-
