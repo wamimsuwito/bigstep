@@ -269,12 +269,20 @@ export default function HrdPusatPage() {
         }
         
         return dataToGroup.reduce((acc, activity) => {
-            const key = activity.username;
-            if (!acc[key]) { acc[key] = []; }
-            acc[key].push(activity);
+            const key = activity.userId;
+            if (!acc[key]) {
+                 const user = allUsers.find(u => u.id === activity.userId);
+                 if (user) {
+                     acc[key] = { ...user, activities: [] };
+                 }
+            }
+            if (acc[key]) {
+                acc[key].activities.push(activity);
+            }
             return acc;
-        }, {} as Record<string, ActivityLog[]>);
-    }, [allActivities, activityDateRange, activeMenu]);
+        }, {} as Record<string, UserData & { activities: ActivityLog[] }>);
+    }, [allActivities, activityDateRange, activeMenu, allUsers]);
+
 
     const { filteredHistoryRecords, historySummary } = useMemo(() => {
         if (!historyDateRange?.from) {
@@ -448,7 +456,7 @@ export default function HrdPusatPage() {
         switch (status) { case 'completed': return <Badge className="bg-green-100 text-green-800">Selesai</Badge>; case 'in_progress': return <Badge className="bg-blue-100 text-blue-800">Proses</Badge>; case 'pending': return <Badge className="bg-yellow-100 text-yellow-800">Menunggu</Badge>; default: return <Badge>{status}</Badge>; }
     };
     
-    const renderActivityContent = (title: string, data: Record<string, ActivityLog[]>) => {
+    const renderActivityContent = (title: string, data: Record<string, UserData & { activities: ActivityLog[] }>) => {
         const getGroupStatusSummary = (activities: ActivityLog[]) => {
             const summary = activities.reduce((acc, act) => { const statusKey = act.status || 'unknown'; acc[statusKey] = (acc[statusKey] || 0) + 1; return acc; }, {} as Record<string, number>);
             return (<div className="flex gap-2 text-xs">{summary.completed > 0 && <Badge variant="secondary" className="bg-green-100 text-green-800">{summary.completed} Selesai</Badge>}{summary.in_progress > 0 && <Badge variant="secondary" className="bg-blue-100 text-blue-800">{summary.in_progress} Proses</Badge>}{summary.pending > 0 && <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">{summary.pending} Menunggu</Badge>}</div>)
@@ -463,9 +471,9 @@ export default function HrdPusatPage() {
                         </div>
                     )}
                     {isLoading ? <div className="flex justify-center items-center h-60"><Loader2 className="animate-spin h-8 w-8 text-primary"/></div> 
-                               : <Accordion type="single" collapsible className="w-full">{Object.entries(data).length > 0 ? Object.entries(data).map(([username, activities]) => (
-                                         <AccordionItem value={username} key={username}><AccordionTrigger><div className='flex items-center justify-between w-full'><div className="flex items-center gap-3 text-left"><Avatar className="h-9 w-9"><AvatarFallback>{username.charAt(0)}</AvatarFallback></Avatar><div><p className="font-semibold text-sm">{username}</p><p className="text-xs text-muted-foreground">{activities.length} Laporan</p></div></div><div className="hidden sm:block">{getGroupStatusSummary(activities)}</div></div></AccordionTrigger>
-                                            <AccordionContent className="pl-4"><div className="space-y-3 p-2 bg-muted/30 rounded-md">{activities.map(activity => (<div key={activity.id} className="p-3 border rounded-md bg-background"><div className="flex justify-between items-start"><div><p className="text-sm text-muted-foreground">{activity.description}</p><div className="text-xs text-muted-foreground space-y-1 mt-1"><p className="flex items-center gap-2"><Clock size={14}/>Target: {safeFormatTimestamp(activity.targetTimestamp, 'dd MMM, HH:mm')}</p></div></div>{getStatusBadge(activity.status)}</div><div className="grid grid-cols-3 gap-2 pt-3 mt-3 border-t"><PhotoWithTimestamp photo={activity.photoInitial} timestamp={activity.createdAt} label="Awal" /><PhotoWithTimestamp photo={activity.photoInProgress} timestamp={activity.timestampInProgress} label="Proses" /><PhotoWithTimestamp photo={activity.photoCompleted} timestamp={activity.timestampCompleted} label="Selesai" /></div></div>))}</div></AccordionContent>
+                               : <Accordion type="single" collapsible className="w-full">{Object.values(data).length > 0 ? Object.values(data).map((user) => (
+                                         <AccordionItem value={user.username} key={user.username}><AccordionTrigger><div className='flex items-center justify-between w-full'><div className="flex items-center gap-3 text-left"><Avatar className="h-9 w-9"><AvatarFallback>{user.username.charAt(0)}</AvatarFallback></Avatar><div><p className="font-semibold text-sm">{user.username}</p><p className="text-xs text-muted-foreground">{user.activities.length} Laporan</p></div></div><div className="hidden sm:block">{getGroupStatusSummary(user.activities)}</div></div></AccordionTrigger>
+                                            <AccordionContent className="pl-4"><div className="space-y-3 p-2 bg-muted/30 rounded-md">{user.activities.map(activity => (<div key={activity.id} className="p-3 border rounded-md bg-background"><div className="flex justify-between items-start"><div><p className="text-sm text-muted-foreground">{activity.description}</p><div className="text-xs text-muted-foreground space-y-1 mt-1"><p className="flex items-center gap-2"><Clock size={14}/>Target: {safeFormatTimestamp(activity.targetTimestamp, 'dd MMM, HH:mm')}</p></div></div>{getStatusBadge(activity.status)}</div><div className="grid grid-cols-3 gap-2 pt-3 mt-3 border-t"><PhotoWithTimestamp photo={activity.photoInitial} timestamp={activity.createdAt} label="Awal" /><PhotoWithTimestamp photo={activity.photoInProgress} timestamp={activity.timestampInProgress} label="Proses" /><PhotoWithTimestamp photo={activity.photoCompleted} timestamp={activity.timestampCompleted} label="Selesai" /></div></div>))}</div></AccordionContent>
                                          </AccordionItem>
                                     )) : <div className="text-center py-10 text-muted-foreground">Tidak ada aktivitas pada periode ini.</div>}</Accordion>}
                 </CardContent>
@@ -551,7 +559,7 @@ export default function HrdPusatPage() {
         <>
             <div className="hidden">
               <div id="hrd-activity-print-area">
-                <HrdActivityPrintLayout data={Object.values(groupedActivities).flat()} title={activeMenu} currentUser={userInfo}/>
+                <HrdActivityPrintLayout data={Object.values(groupedActivities)} title={activeMenu} currentUser={userInfo}/>
               </div>
             </div>
             <Dialog open={isPenaltyPrintPreviewOpen} onOpenChange={setIsPenaltyPrintPreviewOpen}><DialogContent className="max-w-4xl p-0"><DialogHeader className="p-4 border-b no-print"><DialogTitle>Pratinjau Surat Penalti</DialogTitle><DialogClose asChild><Button variant="ghost" size="icon" className="absolute right-4 top-3"><X className="h-4 w-4"/></Button></DialogClose></DialogHeader><div className="p-6 max-h-[80vh] overflow-y-auto" id="printable-penalty"><PenaltyPrintLayout penaltyData={penaltyToPrint} /></div><DialogFooter className="p-4 border-t bg-muted no-print"><Button variant="outline" onClick={() => setIsPenaltyPrintPreviewOpen(false)}>Tutup</Button><Button onClick={() => printElement('printable-penalty')}>Cetak</Button></DialogFooter></DialogContent></Dialog>
