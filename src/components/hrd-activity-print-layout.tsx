@@ -27,20 +27,42 @@ const calculateDuration = (start: any, end: any): string => {
     return formatDistanceStrict(endDate, startDate, { locale: localeID });
 };
 
+const PhotoCell = ({ src, timestamp }: { src?: string, timestamp: any }) => {
+    return (
+        <div className="flex flex-col items-center justify-center p-1">
+            {src ? (
+                <>
+                    <img 
+                        src={src} 
+                        alt="Foto Kegiatan" 
+                        className="photo-evidence"
+                        style={{ width: '50mm', height: '50mm', objectFit: 'cover', border: '1px solid black' }}
+                        data-ai-hint="activity evidence"
+                    />
+                    <span className="text-[8px] mt-1">{safeFormatTimestamp(timestamp, 'HH:mm:ss')}</span>
+                </>
+            ) : (
+                <span>-</span>
+            )}
+        </div>
+    );
+};
+
+
 export default function HrdActivityPrintLayout({ data, title }: HrdActivityPrintLayoutProps) {
   const reportDate = format(new Date(), 'EEEE, dd MMMM yyyy', { locale: localeID });
   
-  const allPhotos = data.flatMap(activity => 
-    [
-        activity.photoInitial && { src: activity.photoInitial, label: `Awal: ${activity.description.substring(0, 30)}...`, timestamp: activity.createdAt },
-        activity.photoInProgress && { src: activity.photoInProgress, label: `Proses: ${activity.description.substring(0, 30)}...`, timestamp: activity.timestampInProgress },
-        activity.photoCompleted && { src: activity.photoCompleted, label: `Selesai: ${activity.description.substring(0, 30)}...`, timestamp: activity.timestampCompleted },
-    ].filter((photo): photo is { src: string; label: string; timestamp: any; } => !!photo)
-  );
-
-
   return (
     <div className="bg-white text-black p-4 font-sans printable-area">
+        <style jsx global>{`
+            @media print {
+                .photo-evidence {
+                    width: 50mm !important;
+                    height: 50mm !important;
+                    object-fit: cover !important;
+                }
+            }
+        `}</style>
         <div className="watermark">PT FARIKA RIAU PERKASA</div>
         <header className="print-header text-center mb-8">
             <img src="https://i.imgur.com/CxaNLPj.png" alt="Logo" className="print-logo h-24 w-auto" data-ai-hint="logo company" style={{ float: 'left', marginRight: '20px' }}/>
@@ -79,10 +101,10 @@ export default function HrdActivityPrintLayout({ data, title }: HrdActivityPrint
                             <p className="font-semibold">{activity.username}</p>
                         </td>
                         <td className="border border-black p-1 text-left text-xs">{activity.description}</td>
-                        <td className="border border-black p-1 text-center text-xs">{safeFormatTimestamp(activity.createdAt, 'HH:mm')}</td>
-                        <td className="border border-black p-1 text-center text-xs">{safeFormatTimestamp(activity.timestampInProgress, 'HH:mm')}</td>
-                        <td className="border border-black p-1 text-center text-xs">{safeFormatTimestamp(activity.timestampCompleted, 'HH:mm')}</td>
-                        <td className="border border-black p-1 text-center text-xs">{calculateDuration(activity.createdAt, activity.timestampCompleted)}</td>
+                        <td className="border border-black p-1 text-center text-xs"><PhotoCell src={activity.photoInitial} timestamp={activity.createdAt} /></td>
+                        <td className="border border-black p-1 text-center text-xs"><PhotoCell src={activity.photoInProgress} timestamp={activity.timestampInProgress} /></td>
+                        <td className="border border-black p-1 text-center text-xs"><PhotoCell src={activity.photoCompleted} timestamp={activity.timestampCompleted} /></td>
+                        <td className="border border-black p-1 text-center text-xs align-top">{calculateDuration(activity.createdAt, activity.timestampCompleted)}</td>
                     </tr>
                 ))
              : (
@@ -90,24 +112,6 @@ export default function HrdActivityPrintLayout({ data, title }: HrdActivityPrint
             )}
           </tbody>
         </table>
-
-         {allPhotos.length > 0 && (
-          <div className="mt-8" style={{ pageBreakInside: 'avoid' }}>
-            <h3 className="font-bold text-center border-t-2 border-black pt-2 mb-4">LAMPIRAN FOTO KEGIATAN</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
-              {allPhotos.map((photo, index) => (
-                <div key={index} className="text-center" style={{ breakInside: 'avoid' }}>
-                  <img src={photo?.src || ''} alt={photo?.label} className="border border-black w-full" data-ai-hint="activity evidence" />
-                  <p className="text-xs mt-1">
-                    <strong>{photo?.label}</strong>
-                    <br />
-                    <span>{safeFormatTimestamp(photo?.timestamp, 'dd MMM, HH:mm')}</span>
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </main>
       <footer className="signature-section mt-16">
           <div>
