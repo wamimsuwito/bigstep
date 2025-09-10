@@ -4,7 +4,7 @@
 import * as React from 'react';
 import type { ActivityLog, UserData } from '@/lib/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { format, formatDistanceStrict, isAfter } from 'date-fns';
+import { format, formatDistanceStrict, isAfter, differenceInMinutes } from 'date-fns';
 import { id as localeID } from 'date-fns/locale';
 
 interface HrdActivityPrintLayoutProps {
@@ -50,11 +50,17 @@ const CompletionStatus = ({ activity }: { activity: ActivityLog }) => {
     if (!target || !completed) {
         return null;
     }
+    
+    const diffMinutes = differenceInMinutes(completed, target);
+    const diffAbs = Math.abs(diffMinutes);
+    const hours = Math.floor(diffAbs / 60);
+    const minutes = diffAbs % 60;
+    const timeDiffString = `${hours > 0 ? `${hours}j ` : ''}${minutes}m`;
 
-    if (isAfter(completed, target)) {
-        return <p className="font-bold text-red-600">TERLAMBAT</p>;
-    } else if (isAfter(target, completed)) {
-        return <p className="font-bold text-green-600">LEBIH CEPAT</p>;
+    if (diffMinutes > 0) {
+        return <p className="font-bold text-red-600">TERLAMBAT ({timeDiffString})</p>;
+    } else if (diffMinutes < 0) {
+        return <p className="font-bold text-green-600">LEBIH CEPAT ({timeDiffString})</p>;
     } else {
         return <p className="font-bold">TEPAT WAKTU</p>;
     }
