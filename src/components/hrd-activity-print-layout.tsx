@@ -2,7 +2,7 @@
 'use client';
 
 import * as React from 'react';
-import type { ActivityLog } from '@/lib/types';
+import type { ActivityLog, UserData } from '@/lib/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format, formatDistanceStrict } from 'date-fns';
 import { id as localeID } from 'date-fns/locale';
@@ -10,6 +10,7 @@ import { id as localeID } from 'date-fns/locale';
 interface HrdActivityPrintLayoutProps {
   data: ActivityLog[];
   title: string;
+  currentUser: UserData | null;
 }
 
 const safeFormatTimestamp = (timestamp: any, formatString: string) => {
@@ -27,7 +28,7 @@ const calculateDuration = (start: any, end: any): string => {
     return formatDistanceStrict(endDate, startDate, { locale: localeID });
 };
 
-const PhotoCell = ({ src, timestamp }: { src?: string, timestamp: any }) => {
+const PhotoCell = ({ src, timestamp }: { src?: string | null, timestamp: any }) => {
     return (
         <div className="flex flex-col items-center justify-center p-1">
             {src ? (
@@ -49,7 +50,7 @@ const PhotoCell = ({ src, timestamp }: { src?: string, timestamp: any }) => {
 };
 
 
-export default function HrdActivityPrintLayout({ data, title }: HrdActivityPrintLayoutProps) {
+export default function HrdActivityPrintLayout({ data, title, currentUser }: HrdActivityPrintLayoutProps) {
   const reportDate = format(new Date(), 'EEEE, dd MMMM yyyy', { locale: localeID });
   
   return (
@@ -114,15 +115,11 @@ export default function HrdActivityPrintLayout({ data, title }: HrdActivityPrint
         </table>
       </main>
       <footer className="signature-section mt-16">
-          <div>
-              <p>Mengetahui,</p>
+          <div className="text-center">
+              <p>Dibuat oleh,</p>
               <div className="signature-box"></div>
-              <p>(Pimpinan)</p>
-          </div>
-          <div>
-              <p>Disiapkan oleh,</p>
-              <div className="signature-box"></div>
-              <p>(HRD Pusat)</p>
+              <p className='font-bold underline'>({currentUser?.username || '.........................'})</p>
+              <p>{currentUser?.jabatan || '.........................'}</p>
           </div>
       </footer>
     </div>
