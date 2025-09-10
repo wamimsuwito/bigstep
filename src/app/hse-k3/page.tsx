@@ -321,7 +321,7 @@ const DailyActivitiesComponent = ({ location, currentUser }: { location: string,
         <>
             <div className="hidden">
                 <div id="hse-activity-print-area">
-                    <HrdActivityPrintLayout data={filteredCombinedData} location={location} currentUser={currentUser} />
+                    <HrdActivityPrintLayout data={filteredCombinedData} location={location} title="Laporan Kegiatan Harian" currentUser={currentUser} />
                 </div>
             </div>
              <Card>
@@ -378,7 +378,7 @@ const DailyActivitiesComponent = ({ location, currentUser }: { location: string,
     )
 }
 
-const ActivityHistoryComponent = ({ allActivities, users, location }: { allActivities: ActivityLog[], users: UserData[], location: string }) => {
+const ActivityHistoryComponent = ({ allActivities, users, location, currentUser }: { allActivities: ActivityLog[], users: UserData[], location: string, currentUser: UserData | null }) => {
     const { toast } = useToast();
     const [dateRange, setDateRange] = useState<DateRange | undefined>({ from: subDays(new Date(), 7), to: new Date() });
     
@@ -410,32 +410,43 @@ const ActivityHistoryComponent = ({ allActivities, users, location }: { allActiv
     
      const groupedActivities = useMemo(() => {
         return filteredActivities.reduce((acc, activity) => {
-            const key = activity.username;
-            if (!acc[key]) { acc[key] = []; }
-            acc[key].push(activity);
+            const user = users.find(u => u.id === activity.userId);
+            if (!user) return acc;
+            const key = activity.userId;
+            if (!acc[key]) { 
+                acc[key] = { ...user, activities: [] }; 
+            }
+            acc[key].activities.push(activity);
             return acc;
-        }, {} as Record<string, ActivityLog[]>);
-    }, [filteredActivities]);
+        }, {} as Record<string, UserData & { activities: ActivityLog[] }>);
+    }, [filteredActivities, users]);
 
     return (
-        <Card>
-            <CardHeader>
-                <CardTitle>Database Kegiatan</CardTitle>
-                <CardDescription>Cari dan lihat riwayat kegiatan seluruh karyawan di lokasi Anda.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                <div className="flex items-center gap-2 mb-4">
-                    <Popover><PopoverTrigger asChild><Button variant="outline" className={cn("w-[280px] justify-start text-left font-normal", !dateRange && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{dateRange?.from ? (dateRange.to ? (<>{format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}</>) : (format(dateRange.from, "LLL dd, y"))) : (<span>Pilih rentang tanggal</span>)}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="range" selected={dateRange} onSelect={setDateRange} numberOfMonths={2}/></PopoverContent></Popover>
-                    <Button variant="ghost" size="icon" onClick={() => setDateRange(undefined)} disabled={!dateRange}><FilterX /></Button>
-                    <Button variant="outline" className="ml-auto" onClick={() => {/* TODO: Print logic */}} disabled={filteredActivities.length === 0}><Printer className="mr-2 h-4 w-4"/>Cetak Hasil</Button>
+        <>
+            <div className="hidden">
+                <div id="hse-history-activity-print-area">
+                    <HrdActivityPrintLayout data={Object.values(groupedActivities)} location={location} title="Riwayat Laporan Kegiatan" currentUser={currentUser}/>
                 </div>
-                <Accordion type="single" collapsible className="w-full">{Object.keys(groupedActivities).length > 0 ? Object.entries(groupedActivities).map(([username, activities]) => (
-                    <AccordionItem value={username} key={username}><AccordionTrigger><div className='flex items-center justify-between w-full'><div className="flex items-center gap-3 text-left"><p className="font-semibold text-sm">{username}</p></div></div></AccordionTrigger>
-                        <AccordionContent className="pl-4"><div className="space-y-3 p-2 bg-muted/30 rounded-md">{activities.map(activity => (<div key={activity.id} className="p-3 border rounded-md bg-background"><div className="flex justify-between items-start"><div><p className="text-sm text-muted-foreground">{activity.description}</p><div className="text-xs text-muted-foreground space-y-1 mt-1"><p className="flex items-center gap-2"><Clock size={14}/>Target: {safeFormatTimestamp(activity.targetTimestamp, 'dd MMM, HH:mm')}</p></div></div>{getStatusBadge(activity.status)}</div><div className="grid grid-cols-3 gap-2 pt-3 mt-3 border-t"><PhotoViewer photoUrl={activity.photoInitial} timestamp={activity.createdAt} /><PhotoViewer photoUrl={activity.photoInProgress} timestamp={activity.timestampInProgress} /><PhotoViewer photoUrl={activity.photoCompleted} timestamp={activity.timestampCompleted} /></div></div>))}</div></AccordionContent>
-                    </AccordionItem>
-                )) : <div className="text-center py-10 text-muted-foreground">Tidak ada aktivitas pada periode ini.</div>}</Accordion>
-            </CardContent>
-        </Card>
+            </div>
+            <Card>
+                <CardHeader>
+                    <CardTitle>Database Kegiatan</CardTitle>
+                    <CardDescription>Cari dan lihat riwayat kegiatan seluruh karyawan di lokasi Anda.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex items-center gap-2 mb-4">
+                        <Popover><PopoverTrigger asChild><Button variant="outline" className={cn("w-[280px] justify-start text-left font-normal", !dateRange && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{dateRange?.from ? (dateRange.to ? (<>{format(dateRange.from, "LLL dd, y")} - {format(dateRange.to, "LLL dd, y")}</>) : (format(dateRange.from, "LLL dd, y"))) : (<span>Pilih rentang tanggal</span>)}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="range" selected={dateRange} onSelect={setDateRange} numberOfMonths={2}/></PopoverContent></Popover>
+                        <Button variant="ghost" size="icon" onClick={() => setDateRange(undefined)} disabled={!dateRange}><FilterX /></Button>
+                        <Button variant="outline" className="ml-auto" onClick={() => printElement('hse-history-activity-print-area')} disabled={filteredActivities.length === 0}><Printer className="mr-2 h-4 w-4"/>Cetak Hasil</Button>
+                    </div>
+                    <Accordion type="single" collapsible className="w-full">{Object.keys(groupedActivities).length > 0 ? Object.entries(groupedActivities).map(([userId, user]) => (
+                        <AccordionItem value={userId} key={userId}><AccordionTrigger><div className='flex items-center justify-between w-full'><div className="flex items-center gap-3 text-left"><p className="font-semibold text-sm">{user.username}</p></div></div></AccordionTrigger>
+                            <AccordionContent className="pl-4"><div className="space-y-3 p-2 bg-muted/30 rounded-md">{user.activities.map(activity => (<div key={activity.id} className="p-3 border rounded-md bg-background"><div className="flex justify-between items-start"><div><p className="text-sm text-muted-foreground">{activity.description}</p><div className="text-xs text-muted-foreground space-y-1 mt-1"><p className="flex items-center gap-2"><Clock size={14}/>Target: {safeFormatTimestamp(activity.targetTimestamp, 'dd MMM, HH:mm')}</p></div></div>{getStatusBadge(activity.status)}</div><div className="grid grid-cols-3 gap-2 pt-3 mt-3 border-t"><PhotoViewer photoUrl={activity.photoInitial} timestamp={activity.createdAt} /><PhotoViewer photoUrl={activity.photoInProgress} timestamp={activity.timestampInProgress} /><PhotoViewer photoUrl={activity.photoCompleted} timestamp={activity.timestampCompleted} /></div></div>))}</div></AccordionContent>
+                        </AccordionItem>
+                    )) : <div className="text-center py-10 text-muted-foreground">Tidak ada aktivitas pada periode ini.</div>}</Accordion>
+                </CardContent>
+            </Card>
+        </>
     );
 }
 
@@ -652,7 +663,7 @@ export default function HseK3Page() {
         case 'Kegiatan Harian':
             return <DailyActivitiesComponent location={userInfo.lokasi || ''} currentUser={userInfo} />;
         case 'Database Kegiatan':
-             return <ActivityHistoryComponent allActivities={allActivities} users={usersInLocation} location={userInfo.lokasi || ''} />;
+             return <ActivityHistoryComponent allActivities={allActivities} users={usersInLocation} location={userInfo.lokasi || ''} currentUser={userInfo}/>;
         case 'Jumlah Karyawan Hari Ini':
             return <EmployeeSummaryComponent usersInLocation={usersInLocation} />;
         default:
