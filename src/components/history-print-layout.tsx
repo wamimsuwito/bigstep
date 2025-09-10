@@ -133,16 +133,16 @@ export default function HistoryPrintLayout({ data, allReports, users, location }
           </TableBody>
         </table>
       </main>
-      <footer className="signature-section">
-          <div>
+      <footer className="flex justify-around mt-16 text-sm" style={{ pageBreakInside: 'avoid' }}>
+          <div className="text-center">
               <p>Disiapkan oleh,</p>
-              <div className="signature-box"></div>
-              <p>(Kepala Mekanik)</p>
+              <div className="h-24"></div>
+              <p className="font-bold underline">(Kepala Mekanik)</p>
           </div>
-           <div>
+           <div className="text-center">
               <p>Diketahui oleh,</p>
-              <div className="signature-box"></div>
-              <p>(Kepala Workshop)</p>
+              <div className="h-24"></div>
+              <p className="font-bold underline">(Kepala Workshop)</p>
           </div>
       </footer>
     </div>
