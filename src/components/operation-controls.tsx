@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -262,6 +263,7 @@ export default function OperationControls({
                 jumlahMixing: jumlahMixing,
                 startTime: startTime,
                 endTime: new Date(),
+                selectedSilo: selectedSilo,
             };
         }
         

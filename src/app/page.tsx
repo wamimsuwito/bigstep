@@ -609,8 +609,8 @@ export default function DashboardPage() {
     setNomorMobil('');
     setNomorLambung('');
     setSelectedSilo('');
-    onSetActiveSchedule(null);
-    onSetActiveJobMix(null);
+    setActiveSchedule(null);
+    setActiveJobMix(null);
   }
 
   const handleStop = async (data?: PrintData, options: { isAborted?: boolean, mode: OperationMode } = { isAborted: true, mode: 'auto' }) => {
