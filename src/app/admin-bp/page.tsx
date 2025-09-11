@@ -24,7 +24,7 @@ import { format, addDays } from 'date-fns';
 import { id } from 'date-fns/locale';
 import type { UserData, ScheduleRow, LocationData, JobMix, CementSiloStock } from '@/lib/types';
 import { Sidebar, SidebarProvider, SidebarTrigger, SidebarInset, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarFooter } from '@/components/ui/sidebar';
-import { db, collection, getDocs, doc, setDoc, deleteDoc, onSnapshot, updateDoc } from '@/lib/firebase';
+import { db, collection, getDocs, doc, setDoc, deleteDoc, onSnapshot, updateDoc, query, where, writeBatch } from '@/lib/firebase';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -173,7 +173,8 @@ export default function AdminBpPage() {
 
         fetchJobMixes();
 
-        const todayUnsub = onSnapshot(collection(db, 'schedules_today'), (snapshot) => {
+        const todayQuery = query(collection(db, 'schedules_today'), where('lokasi', '==', lokasiBp));
+        const todayUnsub = onSnapshot(todayQuery, (snapshot) => {
             const todayData = snapshot.docs.map(d => ({ ...d.data(), id: d.id })) as ScheduleRow[];
             const sortedData = todayData.sort((a, b) => parseInt(a.NO) - parseInt(b.NO));
             setTableData(sortedData.length > 0 ? [...sortedData, createNewEmptyRow(String(sortedData.length + 1))] : [createNewEmptyRow('1')]);
@@ -185,7 +186,8 @@ export default function AdminBpPage() {
         });
         unsubscribers.push(todayUnsub);
         
-        const tomorrowUnsub = onSnapshot(collection(db, `schedules_${lokasiBp}_tomorrow`), (snapshot) => {
+        const tomorrowQuery = query(collection(db, `schedules_tomorrow`), where('lokasi', '==', lokasiBp));
+        const tomorrowUnsub = onSnapshot(tomorrowQuery, (snapshot) => {
             const tomorrowData = snapshot.docs.map(d => ({ ...d.data(), id: d.id })) as ScheduleRow[];
             const sortedData = tomorrowData.sort((a, b) => parseInt(a.NO) - parseInt(b.NO));
             setScheduleForTomorrow(sortedData.length > 0 ? [...sortedData, createNewEmptyRow(String(sortedData.length + 1))] : [createNewEmptyRow('1')]);
@@ -265,22 +267,28 @@ export default function AdminBpPage() {
         }
         setIsLoading(true);
 
-        const dataToSave = (scheduleType === 'today' ? tableData : scheduleForTomorrow).filter(row => !isRowEmpty(row));
-        const collectionName = scheduleType === 'today' ? 'schedules_today' : `schedules_${lokasiBp}_tomorrow`;
+        const dataToSave = (scheduleType === 'today' ? tableData : scheduleForTomorrow)
+          .filter(row => !isRowEmpty(row))
+          .map(row => ({ ...row, lokasi: lokasiBp })); // Add location to each row
+
+        const collectionName = scheduleType === 'today' ? 'schedules_today' : `schedules_tomorrow`;
         
         try {
-            const existingDocsSnapshot = await getDocs(collection(db, collectionName));
+            const batch = writeBatch(db);
+            const existingDocsQuery = query(collection(db, collectionName), where('lokasi', '==', lokasiBp));
+            const existingDocsSnapshot = await getDocs(existingDocsQuery);
+
             for (const d of existingDocsSnapshot.docs) {
                 if (!dataToSave.find(row => row.id === d.id)) {
-                    await deleteDoc(d.ref);
+                   batch.delete(d.ref);
                 }
             }
 
             for (const row of dataToSave) {
-                if (row.id) {
-                    await setDoc(doc(db, collectionName, row.id), row);
-                }
+                 batch.set(doc(db, collectionName, row.id), row);
             }
+
+            await batch.commit();
             toast({ title: `Data Tersimpan`, description: `Jadwal untuk ${scheduleType === 'today' ? 'hari ini' : 'besok'} telah disimpan.` });
         } catch (error) {
             console.error(error);
@@ -301,49 +309,36 @@ export default function AdminBpPage() {
             const todaySchedule = tableData.filter(row => !isRowEmpty(row));
             if (todaySchedule.length > 0) {
                 const dateId = format(new Date(), 'yyyy-MM-dd');
-                const archiveDocRef = doc(db, 'archived_schedules', dateId);
+                const archiveDocRef = doc(db, `archived_schedules/${dateId}-${lokasiBp}`);
                 await setDoc(archiveDocRef, {
-                    id: dateId,
+                    id: `${dateId}-${lokasiBp}`,
                     date: new Date().toISOString(),
                     location: lokasiBp,
                     scheduleData: todaySchedule
                 }, { merge: true });
             }
 
-            const tomorrowScheduleKey = `schedules_${lokasiBp}_tomorrow`;
-            const tomorrowSnapshot = await getDocs(collection(db, tomorrowScheduleKey));
+            const tomorrowQuery = query(collection(db, 'schedules_tomorrow'), where('lokasi', '==', lokasiBp));
+            const tomorrowSnapshot = await getDocs(tomorrowQuery);
+            const newTodayData: ScheduleRow[] = tomorrowSnapshot.docs.map(d => ({ ...d.data(), id: d.id }) as ScheduleRow);
             
-            const newTodayData: ScheduleRow[] = tomorrowSnapshot.docs.map(d => {
-                const data = d.data();
-                return {
-                    id: d.id,
-                    'NO': data['NO'] || '',
-                    'NO P.O': data['NO P.O'] || '',
-                    'NAMA': data['NAMA'] || '',
-                    'LOKASI': data['LOKASI'] || '',
-                    'GRADE': data['GRADE'] || '',
-                    'SLUMP (CM)': data['SLUMP (CM)'] || '',
-                    'CP/M': data['CP/M'] || '',
-                    'VOL M³': data['VOL M³'] || '0',
-                    'PENAMBAHAN VOL M³': data['PENAMBAHAN VOL M³'] || '0',
-                    'TOTAL M³': data['TOTAL M³'] || '0',
-                    'TERKIRIM M³': data['TERKIRIM M³'] || '0',
-                    'SISA M³': data['SISA M³'] || '0',
-                    'STATUS': data['STATUS'] || 'menunggu',
-                    'KET': data['KET'] || '',
-                };
+            const batch = writeBatch(db);
+
+            // Delete today's schedule for this location
+            const todayQuery = query(collection(db, 'schedules_today'), where('lokasi', '==', lokasiBp));
+            const todaySnapshot = await getDocs(todayQuery);
+            todaySnapshot.forEach(d => batch.delete(d.ref));
+            
+            // Move tomorrow's schedule to today
+            newTodayData.forEach(row => {
+                batch.set(doc(db, 'schedules_today', row.id), row);
             });
             
-            const todayScheduleKey = `schedules_today`;
-            const todaySnapshot = await getDocs(collection(db, todayScheduleKey));
-            for(const d of todaySnapshot.docs) await deleteDoc(d.ref);
+            // Delete tomorrow's schedule
+            tomorrowSnapshot.forEach(d => batch.delete(d.ref));
             
-            for(const row of newTodayData) {
-                 await setDoc(doc(db, todayScheduleKey, row.id), row);
-            }
-            for(const d of tomorrowSnapshot.docs) await deleteDoc(d.ref);
+            await batch.commit();
 
-            
             toast({ title: 'Jalur Ditutup & Jadwal Diperbarui', description: `Jadwal hari ini diarsipkan, jadwal besok menjadi aktif.` });
 
         } catch (error) {

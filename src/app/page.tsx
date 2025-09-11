@@ -251,9 +251,9 @@ export default function DashboardPage() {
     if (!userInfo?.lokasi) return;
 
     setIsScheduleLoading(true);
-    const scheduleCollectionRef = collection(db, "schedules_today");
+    const q = query(collection(db, "schedules_today"), where("lokasi", "==", userInfo.lokasi));
 
-    const unsubscribe = onSnapshot(scheduleCollectionRef, (snapshot) => {
+    const unsubscribe = onSnapshot(q, (snapshot) => {
         if (!snapshot.empty) {
             const scheduleList = snapshot.docs.map(d => ({id: d.id, ...d.data()}) as ScheduleRow);
             const sortedData = scheduleList.sort((a, b) => parseInt(a.NO) - parseInt(b.NO));
@@ -272,7 +272,7 @@ export default function DashboardPage() {
         setIsScheduleLoading(false);
     });
 
-    return () => unsubscribe(); // Cleanup the listener on component unmount
+    return () => unsubscribe();
 
   }, [userInfo, toast]);
   
