@@ -182,7 +182,7 @@ export default function OwnerPage() {
         }, (error) => console.error("Error fetching BP status:", error)));
         
         // Listener for Schedules
-        const scheduleQuery = query(collection(db, 'schedules_today'));
+        const scheduleQuery = query(collection(db, 'schedules_today'), where("lokasi", "==", selectedLocation));
         unsubscribers.push(onSnapshot(scheduleQuery, (snapshot) => {
             const schedulesToday = snapshot.docs.map(doc => doc.data() as ScheduleRow);
             
@@ -205,7 +205,7 @@ export default function OwnerPage() {
         }, (error) => console.error("Error fetching schedules:", error)));
 
         
-        const pemasukanQuery = query(collection(db, 'arsip_pemasukan_material_semua'), where('timestamp', '>=', todayStart.toISOString()));
+        const pemasukanQuery = query(collection(db, 'arsip_pemasukan_material_semua'), where('timestamp', '>=', todayStart.toISOString()), where('lokasi', '==', selectedLocation));
         unsubscribers.push(onSnapshot(pemasukanQuery, (snapshot) => {
             const materialSudahBongkar = { semen: 0, pasir: 0, batu: 0 };
             snapshot.docs.forEach(doc => {
@@ -234,7 +234,7 @@ export default function OwnerPage() {
             const alatData = alatSnapshot.docs.map(doc => ({id: doc.id, ...doc.data()}) as AlatData);
             
             Promise.all([
-                getDocs(query(collection(db, 'checklist_reports'))),
+                getDocs(query(collection(db, 'checklist_reports'), where("location", "==", selectedLocation))),
                 getDocs(query(collection(db, 'sopir_batangan'), where("lokasi", "==", selectedLocation)))
             ]).then(([reportSnapshot, pairingSnapshot]) => {
                 const allReports = reportSnapshot.docs.map(doc => ({id: doc.id, ...doc.data()}) as Report);
@@ -285,7 +285,7 @@ export default function OwnerPage() {
             }
         }));
 
-        const bendaUjiQuery = query(collection(db, "benda_uji"), where('createdAt', '>=', Timestamp.fromDate(todayStart)));
+        const bendaUjiQuery = query(collection(db, "benda_uji"), where('createdAt', '>=', Timestamp.fromDate(todayStart)), where("lokasi", "==", selectedLocation));
         unsubscribers.push(onSnapshot(bendaUjiQuery, (snapshot) => {
             const totalBendaUji = snapshot.docs.reduce((sum, doc) => sum + (doc.data() as BendaUji).jumlahSample, 0);
             setSummary(prev => ({ ...prev, qc: { ...prev.qc, bendaUji: totalBendaUji } }));
