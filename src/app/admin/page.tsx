@@ -11,11 +11,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { useToast } from '@/hooks/use-toast';
-import { UserPlus, LogOut, User, Lock, Briefcase, Fingerprint, MapPin, Trash2, Users, Construction, Pencil, X, Loader2, GitCompareArrows, LocateFixed, Save } from 'lucide-react';
+import { UserPlus, LogOut, User, Lock, Briefcase, Fingerprint, MapPin, Trash2, Users, Construction, Pencil, X, Loader2, GitCompareArrows, LocateFixed, Save, Check, ChevronsUpDown } from 'lucide-react';
 import { Sidebar, SidebarProvider, SidebarTrigger, SidebarInset, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, SidebarMenuButton } from '@/components/ui/sidebar';
 import type { UserData as AppUserData, LocationData as AppLocationData } from '@/lib/types';
 import { db, collection, getDocs, addDoc, doc, updateDoc, deleteDoc } from '@/lib/firebase';
+import { cn } from '@/lib/utils';
+
 
 interface UserData extends AppUserData {
   id: string;
@@ -45,6 +49,12 @@ const jabatanOptions = [
     'HELPER MEKANIK', 'HELPER CP', 'HELPER LOGISTIK', 'VIEWER'
 ];
 
+const jenisKendaraanOptions = [
+    "MOBIL INVENTARIS", "MOTOR INVENTARIS", "DT", "KT", "TM", "CP", "FOKO", "CP KODOK",
+    "GENSET", "DUTRU DUMP", "DUTO LOSBAK", "GANTRI KREN", "FORKLIFT", "GENSET 350 KVA",
+    "GENSET 60 KVA", "GENSET 25 KVA", "LOADER"
+];
+
 export default function AdminPage() {
   const router = useRouter();
   const { toast } = useToast();
@@ -53,10 +63,14 @@ export default function AdminPage() {
   const [alat, setAlat] = useState<AlatData[]>([]);
   const [locations, setLocations] = useState<LocationData[]>([]);
   const [activeMenu, setActiveMenu] = useState<ActiveMenu>('pengguna');
-  const [selectedJabatan, setSelectedJabatan] = useState<string>('');
-  const [selectedLokasi, setSelectedLokasi] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [isFetching, setIsFetching] = useState(true);
+
+  // Form states
+  const [selectedJabatan, setSelectedJabatan] = useState<string>('');
+  const [selectedLokasi, setSelectedLokasi] = useState<string>('');
+  const [selectedJenisKendaraan, setSelectedJenisKendaraan] = useState('');
+  const [openJenisKendaraan, setOpenJenisKendaraan] = useState(false);
 
   const [editingUser, setEditingUser] = useState<UserData | null>(null);
   const [editingAlat, setEditingAlat] = useState<AlatData | null>(null);
@@ -211,13 +225,17 @@ export default function AdminPage() {
   
   const handleAddAlat = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!selectedJenisKendaraan) {
+        toast({ variant: 'destructive', title: 'Data Tidak Lengkap', description: 'Harap pilih jenis kendaraan.' });
+        return;
+    }
     setIsLoading(true);
     const form = event.currentTarget;
     const formData = new FormData(form);
     const newAlatData = {
       nomorLambung: (formData.get('nomorLambung') as string).toUpperCase(),
       nomorPolisi: (formData.get('nomorPolisi') as string).toUpperCase(),
-      jenisKendaraan: (formData.get('jenisKendaraan') as string).toUpperCase(),
+      jenisKendaraan: selectedJenisKendaraan,
       lokasi: (formData.get('lokasiAlat') as string),
     };
     
@@ -226,6 +244,7 @@ export default function AdminPage() {
         setAlat(prev => [...prev, { ...newAlatData, id: docRef.id }]);
         toast({ title: 'Alat Ditambahkan', description: `Alat ${newAlatData.nomorLambung} berhasil dibuat.` });
         form.reset();
+        setSelectedJenisKendaraan('');
     } catch (error) {
         console.error("Error adding alat:", error);
         toast({ variant: 'destructive', title: 'Gagal', description: 'Gagal menambahkan alat.' });
@@ -244,7 +263,7 @@ export default function AdminPage() {
     const updatedAlatData = {
       nomorLambung: (formData.get('editNomorLambung') as string).toUpperCase(),
       nomorPolisi: (formData.get('editNomorPolisi') as string).toUpperCase(),
-      jenisKendaraan: (formData.get('editJenisKendaraan') as string).toUpperCase(),
+      jenisKendaraan: (formData.get('editJenisKendaraan') as string),
       lokasi: (formData.get('editLokasiAlat') as string),
     };
 
@@ -585,7 +604,42 @@ export default function AdminPage() {
                                         </div>
                                         <div className="space-y-2">
                                             <Label htmlFor="jenisKendaraan">Jenis Kendaraan</Label>
-                                            <Input id="jenisKendaraan" name="jenisKendaraan" placeholder="cth: TRUCK MIXER" required style={{ textTransform: 'uppercase' }} />
+                                            <Popover open={openJenisKendaraan} onOpenChange={setOpenJenisKendaraan}>
+                                                <PopoverTrigger asChild>
+                                                    <Button
+                                                        variant="outline"
+                                                        role="combobox"
+                                                        aria-expanded={openJenisKendaraan}
+                                                        className="w-full justify-between"
+                                                    >
+                                                        {selectedJenisKendaraan ? selectedJenisKendaraan : "Pilih jenis kendaraan..."}
+                                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                    </Button>
+                                                </PopoverTrigger>
+                                                <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                                                    <Command>
+                                                        <CommandInput placeholder="Cari jenis..." />
+                                                        <CommandEmpty>Jenis tidak ditemukan.</CommandEmpty>
+                                                        <CommandList>
+                                                            <CommandGroup>
+                                                                {jenisKendaraanOptions.map((jenis) => (
+                                                                    <CommandItem
+                                                                        key={jenis}
+                                                                        value={jenis}
+                                                                        onSelect={(currentValue) => {
+                                                                            setSelectedJenisKendaraan(currentValue.toUpperCase() === selectedJenisKendaraan ? "" : currentValue.toUpperCase());
+                                                                            setOpenJenisKendaraan(false);
+                                                                        }}
+                                                                    >
+                                                                        <Check className={cn("mr-2 h-4 w-4", selectedJenisKendaraan === jenis ? "opacity-100" : "opacity-0")} />
+                                                                        {jenis}
+                                                                    </CommandItem>
+                                                                ))}
+                                                            </CommandGroup>
+                                                        </CommandList>
+                                                    </Command>
+                                                </PopoverContent>
+                                            </Popover>
                                         </div>
                                         <div className="space-y-2">
                                             <Label htmlFor="lokasiAlat">Lokasi</Label>
@@ -900,7 +954,12 @@ export default function AdminPage() {
                 </div>
                  <div>
                     <Label htmlFor="editJenisKendaraan">Jenis Kendaraan</Label>
-                    <Input id="editJenisKendaraan" name="editJenisKendaraan" defaultValue={editingAlat?.jenisKendaraan} required style={{ textTransform: 'uppercase' }} />
+                    <Select name="editJenisKendaraan" defaultValue={editingAlat?.jenisKendaraan}>
+                        <SelectTrigger><SelectValue/></SelectTrigger>
+                        <SelectContent>
+                            {jenisKendaraanOptions.map(jenis => <SelectItem key={jenis} value={jenis}>{jenis}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
                 </div>
                  <div>
                     <Label htmlFor="editLokasiAlat">Lokasi</Label>
@@ -947,3 +1006,6 @@ export default function AdminPage() {
     </>
   );
 }
+
+
+    
