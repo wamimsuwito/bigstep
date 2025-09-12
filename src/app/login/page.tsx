@@ -95,8 +95,67 @@ export default function LoginPage() {
             router.push('/hrd-pusat');
         } else if (jabatan.includes('HSE K3')) {
             router.push('/hse-k3');
+        } else if (jabatan === 'OPRATOR FOKO') {
+            router.push('/oprator-foko');
+        } else if (jabatan === 'OPRATOR GANTRI') {
+            router.push('/oprator-gantri');
+        } else if (jabatan === 'OPRATOR BATA RINGAN') {
+            router.push('/oprator-bata-ringan');
+        } else if (jabatan === 'OPRATOR PAVING') {
+            router.push('/oprator-paving');
+        } else if (jabatan === 'OPRATOR EXA') {
+            router.push('/oprator-exa');
+        } else if (jabatan === 'OPRATOR FORKLIFT') {
+            router.push('/oprator-forklift');
+        } else if (jabatan === 'SOPIR TM') {
+            router.push('/sopir-tm');
+        } else if (jabatan === 'SOPIR OPRASIONAL') {
+            router.push('/sopir-oprasional');
+        } else if (jabatan === 'SOPIR KT') {
+            router.push('/sopir-kt');
+        } else if (jabatan === 'SOPIR DUTRO') {
+            router.push('/sopir-dutro');
+        } else if (jabatan === 'ADMIN QC') {
+            router.push('/admin-qc');
+        } else if (jabatan === 'ADMIN BBM') {
+            router.push('/admin-bbm');
+        } else if (jabatan === 'ADMIN PRECAST') {
+            router.push('/admin-precast');
+        } else if (jabatan === 'KEPALA PRECAST') {
+            router.push('/kepala-precast');
+        } else if (jabatan === 'KEPALA BP') {
+            router.push('/kepala-bp');
+        } else if (jabatan === 'KEPALA KOORDINATOR QC') {
+            router.push('/kepala-koordinator-qc');
+        } else if (jabatan === 'KEPALA KOORDINATOR BP') {
+            router.push('/kepala-koordinator-bp');
+        } else if (jabatan === 'KEPALA KOORDINATOR TEKNIK') {
+            router.push('/kepala-koordinator-teknik');
+        } else if (jabatan === 'KEPALA SOPIR TM') {
+            router.push('/kepala-sopir-tm');
+        } else if (jabatan === 'KEPALA SOPIR DT') {
+            router.push('/kepala-sopir-dt');
+        } else if (jabatan === 'KEPALA SOPIR KT') {
+            router.push('/kepala-sopir-kt');
+        } else if (jabatan === 'KEPALA OPRATOR CP') {
+            router.push('/kepala-oprator-cp');
+        } else if (jabatan === 'HELPER BP') {
+            router.push('/helper-bp');
+        } else if (jabatan === 'HELPER QC') {
+            router.push('/helper-qc');
+        } else if (jabatan === 'HELPER PRECAST & BATA RINGAN') {
+            router.push('/helper-precast');
+        } else if (jabatan === 'HELPER PAVING') {
+            router.push('/helper-paving');
+        } else if (jabatan === 'HELPER MEKANIK') {
+            router.push('/helper-mekanik');
+        } else if (jabatan === 'HELPER CP') {
+            router.push('/helper-cp');
+        } else if (jabatan === 'HELPER LOGISTIK') {
+            router.push('/helper-logistik');
+        } else if (jabatan === 'VIEWER') {
+            router.push('/viewer');
         } else {
-            // Fallback for any other roles, maybe to a generic dashboard or just show a toast
             toast({
                 variant: 'destructive',
                 title: 'Akses Ditolak',

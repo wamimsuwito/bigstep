@@ -37,7 +37,12 @@ type ActiveMenu = 'pengguna' | 'alat' | 'lokasi' | 'sinkronisasi' | 'koordinat';
 
 const jabatanOptions = [
     'OPRATOR BP', 'OPRATOR CP', 'OPRATOR LOADER', 'PEKERJA BONGKAR SEMEN', 'SOPIR', 'SOPIR DT', 'ADMIN BP', 'ADMIN LOGISTIK SPARE PART',
-    'ADMIN LOGISTIK MATERIAL', 'SUPER ADMIN', 'QC', 'MARKETING', 'KEPALA MEKANIK', 'KEPALA WORKSHOP', 'OWNER', 'HRD PUSAT', 'HSE K3'
+    'ADMIN LOGISTIK MATERIAL', 'SUPER ADMIN', 'QC', 'MARKETING', 'KEPALA MEKANIK', 'KEPALA WORKSHOP', 'OWNER', 'HRD PUSAT', 'HSE K3',
+    'OPRATOR FOKO', 'OPRATOR GANTRI', 'OPRATOR BATA RINGAN', 'OPRATOR PAVING', 'OPRATOR EXA', 'OPRATOR FORKLIFT', 'SOPIR TM',
+    'SOPIR OPRASIONAL', 'SOPIR KT', 'SOPIR DUTRO', 'ADMIN QC', 'ADMIN BBM', 'ADMIN PRECAST', 'KEPALA PRECAST', 'KEPALA BP',
+    'KEPALA KOORDINATOR QC', 'KEPALA KOORDINATOR BP', 'KEPALA KOORDINATOR TEKNIK', 'KEPALA SOPIR TM', 'KEPALA SOPIR DT',
+    'KEPALA SOPIR KT', 'KEPALA OPRATOR CP', 'HELPER BP', 'HELPER QC', 'HELPER PRECAST & BATA RINGAN', 'HELPER PAVING',
+    'HELPER MEKANIK', 'HELPER CP', 'HELPER LOGISTIK', 'VIEWER'
 ];
 
 export default function AdminPage() {
@@ -776,7 +781,7 @@ export default function AdminPage() {
                                     <div>
                                         <h3 className="font-semibold text-lg">Bersihkan Riwayat Alat Lama</h3>
                                         <p className="text-muted-foreground text-sm max-w-prose">
-                                            Tindakan ini akan menghapus semua riwayat data (laporan checklist, tugas mekanik, pasangan sopir) yang terkait dengan kendaraan yang sudah tidak ada lagi di "Manajemen Alat".
+                                            Tindakan ini akan menghapus semua data riwayat (laporan checklist, tugas mekanik, pasangan sopir) yang terkait dengan kendaraan yang sudah tidak ada lagi di "Manajemen Alat".
                                             Gunakan ini untuk menjaga kebersihan data.
                                         </p>
                                     </div>
