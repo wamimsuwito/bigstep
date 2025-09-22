@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Lightbulb, LightbulbOff, Power, Bluetooth, BluetoothConnected, BluetoothSearching } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
