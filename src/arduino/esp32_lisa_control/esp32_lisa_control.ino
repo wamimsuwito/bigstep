@@ -1,82 +1,72 @@
+/*
+  LISA-SPARKLE-HOME
+  ESP32 Bluetooth Low Energy (BLE) Controller
+  
+  Logic: Active HIGH
+  - LED menyala ketika pin GPIO diberi sinyal HIGH.
+  - LED mati ketika pin GPIO diberi sinyal LOW.
+  
+  Koneksi Fisik (Direkomendasikan):
+  - Kaki pendek LED (Katoda) -> Pin GND di ESP32.
+  - Kaki panjang LED (Anoda) -> Salah satu ujung Resistor (220 Ohm).
+  - Ujung resistor lainnya -> Pin GPIO di ESP32 (misal: Pin 2).
+  
+  Pastikan Anda selalu menggunakan resistor untuk melindungi LED dan pin ESP32 Anda!
+*/
 
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
 
-// UUID untuk Service dan Characteristic, HARUS SAMA dengan di aplikasi web
-#define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
-#define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+// UUID untuk Service dan Characteristic, harus sama dengan di aplikasi web
+#define SERVICE_UUID           "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
+#define CHARACTERISTIC_UUID    "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 
-// Pin untuk setiap LED/lampu. Gunakan resistor 220 Ohm untuk setiap LED.
+// Pinout untuk LED, Tombol, dan Sensor
 const int ledPins[] = {2, 4, 5, 18}; // Ruang Tamu, Kamar Mandi, Dapur, Teras
-const int numLeds = 4;
-bool ledStates[numLeds] = {false, false, false, false};
-
-// Pin untuk tombol fisik dan sensor gerak
 const int buttonPin = 19;
 const int pirPin = 21;
+const int blueLedPin = 22; // Pin untuk LED indikator koneksi Bluetooth
 
-// Pin untuk LED indikator koneksi Bluetooth
-const int bleStatusLed = 22; // Gunakan LED biru di board atau LED eksternal
+// Variabel state
+bool ledStates[] = {false, false, false, false};
+bool deviceConnected = false;
 
-// Variabel untuk debouncing tombol
-bool buttonState = HIGH;
-bool lastButtonState = HIGH;
-unsigned long lastDebounceTime = 0;
-unsigned long debounceDelay = 50;
-
-// Variabel untuk sensor gerak (PIR)
-bool motionDetected = false;
-unsigned long lastMotionTime = 0;
-const unsigned long motionTimeout = 60000; // 1 menit
-
-// --- FUNGSI UTILITY UNTUK KONTROL LAMPU ---
-
-void setAllLights(bool state) {
-  for (int i = 0; i < numLeds; i++) {
-    ledStates[i] = state;
-    digitalWrite(ledPins[i], state ? HIGH : LOW);
-  }
-}
-
-void toggleLight(int lightId) {
-  if (lightId >= 1 && lightId <= numLeds) {
-    int index = lightId - 1;
-    ledStates[index] = !ledStates[index];
-    digitalWrite(ledPins[index], ledStates[index] ? HIGH : LOW);
-  }
-}
-
-// --- CALLBACK UNTUK KONEKSI BLUETOOTH ---
-
+// Callback class untuk menangani event koneksi server BLE
 class MyServerCallbacks: public BLEServerCallbacks {
   void onConnect(BLEServer* pServer) {
-    digitalWrite(bleStatusLed, HIGH); // Nyalakan LED biru saat terhubung
-    Serial.println("Client Connected");
+    deviceConnected = true;
+    digitalWrite(blueLedPin, HIGH); // Nyalakan LED biru saat terhubung
   }
 
   void onDisconnect(BLEServer* pServer) {
-    digitalWrite(bleStatusLed, LOW); // Matikan LED biru saat terputus
-    Serial.println("Client Disconnected");
-    BLEDevice::startAdvertising(); // Mulai advertising lagi agar bisa dihubungkan kembali
+    deviceConnected = false;
+    digitalWrite(blueLedPin, LOW); // Matikan LED biru saat koneksi terputus
+    BLEDevice::startAdvertising(); // Mulai advertising lagi agar bisa ditemukan
   }
 };
 
-// --- CALLBACK UNTUK MENERIMA PERINTAH DARI APLIKASI WEB ---
-
+// Callback class untuk menangani event penulisan data ke characteristic
 class MyCallbacks: public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *pCharacteristic) {
-    // Menggunakan Arduino String object yang lebih aman untuk library ini
-    String value_str = pCharacteristic->getValue().c_str();
+    std::string value = pCharacteristic->getValue();
 
-    if (value_str.length() > 0) {
-      Serial.print("Received command: ");
-      Serial.println(value_str);
+    if (value.length() > 0) {
+      char command = value[0];
+      int ledIndex = -1;
 
-      // Konversi karakter pertama ke integer
-      int command = value_str.charAt(0) - '0';
-      toggleLight(command);
+      switch(command) {
+        case '1': ledIndex = 0; break; // Ruang Tamu
+        case '2': ledIndex = 1; break; // Kamar Mandi
+        case '3': ledIndex = 2; break; // Ruang Dapur
+        case '4': ledIndex = 3; break; // Lampu Teras
+      }
+
+      if (ledIndex != -1) {
+        ledStates[ledIndex] = !ledStates[ledIndex];
+        digitalWrite(ledPins[ledIndex], ledStates[ledIndex] ? HIGH : LOW);
+      }
     }
   }
 };
@@ -84,88 +74,43 @@ class MyCallbacks: public BLECharacteristicCallbacks {
 void setup() {
   Serial.begin(115200);
 
-  // Inisialisasi semua pin LED dan pastikan mati saat boot
-  for (int i = 0; i < numLeds; i++) {
+  // Inisialisasi semua pin LED sebagai OUTPUT dan set ke LOW (mati)
+  for (int i = 0; i < 4; i++) {
     pinMode(ledPins[i], OUTPUT);
-    digitalWrite(ledPins[i], LOW); // Logika Active HIGH: LOW berarti mati
+    digitalWrite(ledPins[i], LOW);
   }
+  
+  // Inisialisasi pin untuk indikator koneksi
+  pinMode(blueLedPin, OUTPUT);
+  digitalWrite(blueLedPin, LOW);
 
-  // Inisialisasi pin lainnya
-  pinMode(buttonPin, INPUT_PULLUP);
-  pinMode(pirPin, INPUT);
-  pinMode(bleStatusLed, OUTPUT);
-  digitalWrite(bleStatusLed, LOW); // Pastikan LED status mati di awal
-
-  // --- SETUP SERVER BLE ---
+  // Setup BLE
   BLEDevice::init("Lisa Home Control ESP32");
   BLEServer *pServer = BLEDevice::createServer();
   pServer->setCallbacks(new MyServerCallbacks());
 
   BLEService *pService = pServer->createService(SERVICE_UUID);
-
   BLECharacteristic *pCharacteristic = pService->createCharacteristic(
                                          CHARACTERISTIC_UUID,
                                          BLECharacteristic::PROPERTY_READ |
                                          BLECharacteristic::PROPERTY_WRITE
                                        );
-  pCharacteristic->setCallbacks(new MyCallbacks());
-  pCharacteristic->setValue("Ready");
 
+  pCharacteristic->setCallbacks(new MyCallbacks());
   pService->start();
 
-  // --- MULAI ADVERTISING ---
+  // Setup advertising
   BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
   pAdvertising->addServiceUUID(SERVICE_UUID);
   pAdvertising->setScanResponse(true);
   pAdvertising->setMinPreferred(0x06);
   pAdvertising->setMinPreferred(0x12);
   BLEDevice::startAdvertising();
-  Serial.println("Characteristic defined! Now advertising...");
+  Serial.println("Characteristic defined! Now you can connect with your phone!");
 }
 
 void loop() {
-  // --- LOGIKA UNTUK TOMBOL FISIK ---
-  int reading = digitalRead(buttonPin);
-  if (reading != lastButtonState) {
-    lastDebounceTime = millis();
-  }
-
-  if ((millis() - lastDebounceTime) > debounceDelay) {
-    if (reading != buttonState) {
-      buttonState = reading;
-      if (buttonState == LOW) { // Tombol ditekan
-        // Jika salah satu lampu menyala, matikan semua. Jika semua mati, nyalakan semua.
-        bool anyLightOn = false;
-        for(int i=0; i<numLeds; i++) {
-          if (ledStates[i]) {
-            anyLightOn = true;
-            break;
-          }
-        }
-        setAllLights(!anyLightOn);
-      }
-    }
-  }
-  lastButtonState = reading;
-
-  // --- LOGIKA UNTUK SENSOR GERAK (PIR) ---
-  if (digitalRead(pirPin) == HIGH) {
-    if (!motionDetected) {
-      Serial.println("Motion detected!");
-      setAllLights(true);
-      motionDetected = true;
-    }
-    lastMotionTime = millis();
-  } else {
-    if (motionDetected) {
-      if (millis() - lastMotionTime > motionTimeout) {
-        Serial.println("Motion stopped. Turning off lights.");
-        setAllLights(false);
-        motionDetected = false;
-      }
-    }
-  }
-
-  // Tunda sedikit untuk efisiensi
-  delay(50);
+  // Logika lain bisa ditambahkan di sini jika perlu,
+  // misalnya untuk membaca tombol atau sensor.
+  delay(100); 
 }
