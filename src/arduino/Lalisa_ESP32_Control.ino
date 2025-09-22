@@ -1,101 +1,95 @@
-/**
- * @file esp32_lisa_control.ino
- * @author Gemini
- * @brief ESP32 code for Lisa's Home Control project.
- * 
- * This code creates a BLE server to control 4 LEDs, read a push button, and a PIR motion sensor.
- * It's designed to work with the "Lisa Home Control" web application.
- *
- * HARDWARE CONNECTIONS:
- * =======================
- * IMPORTANT: It is highly recommended to use a current-limiting resistor (e.g., 220 Ohm) for each LED.
- * The recommended connection method to ensure LEDs are OFF on boot is:
- * ESP32 Pin 3V3 --> LED Anode (longer leg) --> Resistor --> GPIO Pin
- * 
- * - LED 1 (Ruang Tamu):     GPIO 2
- * - LED 2 (Kamar Mandi):    GPIO 4
- * - LED 3 (Ruang Dapur):    GPIO 5
- * - LED 4 (Lampu Teras):    GPIO 18
- * - Push Button:            GPIO 19 to GND
- * - PIR Sensor:             GPIO 21
- */
+
+/*
+  Lisa Home Control - ESP32 BLE Server
+  
+  Fungsionalitas:
+  1. Kontrol 4 LED melalui Bluetooth Low Energy (BLE) dari aplikasi web.
+  2. Menggunakan 1 tombol fisik untuk menyalakan/mematikan semua lampu secara bersamaan.
+  3. Menggunakan 1 sensor gerak (PIR) untuk menyalakan semua lampu saat ada gerakan.
+  4. LED akan mati otomatis setelah 1 menit tidak ada gerakan.
+
+  Koneksi Pin (Saran dengan Resistor):
+  - LED 1 (Ruang Tamu): 3.3V -> LED -> Resistor 220 Ohm -> Pin 2
+  - LED 2 (Kamar Mandi): 3.3V -> LED -> Resistor 220 Ohm -> Pin 4
+  - LED 3 (Ruang Dapur): 3.3V -> LED -> Resistor 220 Ohm -> Pin 5
+  - LED 4 (Lampu Teras): 3.3V -> LED -> Resistor 220 Ohm -> Pin 18
+  - Tombol Fisik: Pin 19 -> Tombol -> GND
+  - Sensor PIR: Pin 21 (Output sensor)
+*/
 
 #include <BLEDevice.h>
 #include <BLEUtils.h>
 #include <BLEServer.h>
 
-// --- PIN DEFINITIONS ---
-const int ledPins[] = {2, 4, 5, 18};
-const int numLeds = sizeof(ledPins) / sizeof(ledPins[0]);
-const int buttonPin = 19;
-const int pirPin = 21;
-
-// --- STATE VARIABLES ---
-bool ledStates[numLeds] = {false, false, false, false};
-bool allLightsOn = false;
-volatile bool buttonPressed = false;
-unsigned long lastMotionTime = 0;
-const unsigned long motionTimeout = 60000; // 1 minute in milliseconds
-
-// See the following for generating UUIDs:
-// https://www.uuidgenerator.net/
+// UUID yang SAMA PERSIS dengan di aplikasi web
 #define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 #define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 
-// --- FUNCTION PROTOTYPES ---
-void updateAllLeds();
-void IRAM_ATTR handleButtonInterrupt();
+// === Pengaturan Pin ===
+const int ledPins[] = {2, 4, 5, 18}; // Ruang Tamu, Kamar Mandi, Dapur, Teras
+const int numLeds = 4;
+const int buttonPin = 19;
+const int pirPin = 21;
 
-// --- BLE CALLBACKS ---
+// === Variabel Global ===
+bool lightStates[numLeds] = {false, false, false, false}; // false = OFF, true = ON
+bool allLightsState = false;
+volatile bool buttonPressed = false;
+unsigned long lastMotionTime = 0;
+const unsigned long motionTimeout = 60000; // 60 detik
+
+// Callback untuk menangani data yang masuk dari aplikasi web
 class MyCallbacks: public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic *pCharacteristic) {
-      String value = pCharacteristic->getValue().c_str();
+      String value_str = pCharacteristic->getValue().c_str();
 
-      if (value.length() > 0) {
-        char command = value[0];
-        int ledIndex = -1;
+      if (value_str.length() > 0) {
+        char command = value_str[0];
+        
+        int lightIndex = -1;
 
         switch(command) {
-          case '1': ledIndex = 0; break; // Ruang Tamu
-          case '2': ledIndex = 1; break; // Kamar Mandi
-          case '3': ledIndex = 2; break; // Ruang Dapur
-          case '4': ledIndex = 3; break; // Lampu Teras
-          default:
-            Serial.print("Unknown command: ");
-            Serial.println(command);
-            return;
+          case '1': lightIndex = 0; break; // Ruang Tamu
+          case '2': lightIndex = 1; break; // Kamar Mandi
+          case '3': lightIndex = 2; break; // Dapur
+          case '4': lightIndex = 3; break; // Teras
         }
 
-        if (ledIndex != -1) {
-          Serial.print("Toggling LED: ");
-          Serial.println(ledIndex + 1);
-          ledStates[ledIndex] = !ledStates[ledIndex]; // Toggle state
-          digitalWrite(ledPins[ledIndex], ledStates[ledIndex] ? LOW : HIGH); // ACTIVE LOW: LOW is ON
+        if (lightIndex != -1) {
+          lightStates[lightIndex] = !lightStates[lightIndex];
+          // Logika terbalik: LOW untuk ON, HIGH untuk OFF
+          digitalWrite(ledPins[lightIndex], lightStates[lightIndex] ? LOW : HIGH);
+          Serial.print("Lampu ");
+          Serial.print(lightIndex + 1);
+          Serial.println(lightStates[lightIndex] ? " ON" : " OFF");
         }
       }
     }
 };
 
-// --- ARDUINO SETUP ---
+void IRAM_ATTR handleButtonInterrupt() {
+  buttonPressed = true;
+}
+
 void setup() {
   Serial.begin(115200);
 
-  // Initialize LEDs and set them to OFF state (HIGH for active-low)
+  // Inisialisasi semua pin LED dan matikan (set ke HIGH)
   for (int i = 0; i < numLeds; i++) {
     pinMode(ledPins[i], OUTPUT);
-    digitalWrite(ledPins[i], HIGH); // ACTIVE LOW: Set to HIGH to turn OFF
+    digitalWrite(ledPins[i], HIGH); // HIGH mematikan LED
   }
 
-  // Initialize button with internal pull-up and interrupt
+  // Inisialisasi pin tombol dengan pull-up internal
   pinMode(buttonPin, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(buttonPin), handleButtonInterrupt, FALLING);
 
-  // Initialize PIR sensor
+  // Inisialisasi pin sensor PIR
   pinMode(pirPin, INPUT);
 
+  // === Setup Server BLE ===
   Serial.println("Starting BLE server...");
-
-  BLEDevice::init("Lisa Home ESP32");
+  BLEDevice::init("Lisa Home Control ESP32");
   BLEServer *pServer = BLEDevice::createServer();
   BLEService *pService = pServer->createService(SERVICE_UUID);
   BLECharacteristic *pCharacteristic = pService->createCharacteristic(
@@ -105,7 +99,6 @@ void setup() {
                                        );
 
   pCharacteristic->setCallbacks(new MyCallbacks());
-  pCharacteristic->setValue("Hello from Lisa's ESP32!");
   pService->start();
 
   BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
@@ -114,65 +107,45 @@ void setup() {
   pAdvertising->setMinPreferred(0x06);
   pAdvertising->setMinPreferred(0x12);
   BLEDevice::startAdvertising();
-  Serial.println("Characteristic defined! Now you can pair.");
+  Serial.println("Characteristic defined! Now advertising...");
 }
 
-// --- ARDUINO LOOP ---
 void loop() {
-  // Handle button press
+  // === Logika Tombol Fisik ===
   if (buttonPressed) {
-    allLightsOn = !allLightsOn;
-    updateAllLeds();
-    Serial.println(allLightsOn ? "Button: All lights ON" : "Button: All lights OFF");
+    delay(50); // Debounce
+    allLightsState = !allLightsState;
+    for (int i = 0; i < numLeds; i++) {
+      lightStates[i] = allLightsState;
+      digitalWrite(ledPins[i], allLightsState ? LOW : HIGH);
+    }
+    Serial.println(allLightsState ? "All lights ON" : "All lights OFF");
     buttonPressed = false; // Reset flag
-    delay(200); // Debounce
   }
 
-  // Handle PIR sensor
+  // === Logika Sensor Gerak (PIR) ===
   if (digitalRead(pirPin) == HIGH) {
-    if (lastMotionTime == 0) { // First detection
-        Serial.println("Motion detected! Turning all lights ON.");
-        updateAllLeds(true); // Force all lights on
+    if (lastMotionTime == 0) { // Gerakan pertama terdeteksi
+      Serial.println("Motion detected! Turning all lights ON.");
+      for (int i = 0; i < numLeds; i++) {
+        digitalWrite(ledPins[i], LOW); // Nyalakan semua lampu
+      }
     }
-    lastMotionTime = millis();
-  } else {
-    if (lastMotionTime != 0 && (millis() - lastMotionTime > motionTimeout)) {
-      Serial.println("No motion for 1 minute. Turning all lights OFF.");
-      updateAllLeds(false); // Force all lights off
-      lastMotionTime = 0; // Reset motion timer
-    }
+    lastMotionTime = millis(); // Perbarui waktu gerakan terakhir terdeteksi
   }
 
+  // Cek jika sudah tidak ada gerakan selama timeout
+  if (lastMotionTime != 0 && millis() - lastMotionTime > motionTimeout) {
+    Serial.println("No motion for 1 minute. Turning all lights OFF.");
+    for (int i = 0; i < numLeds; i++) {
+       // Hanya matikan lampu jika tidak sedang ON dari perintah BLE atau tombol
+       if (!lightStates[i] && !allLightsState) {
+          digitalWrite(ledPins[i], HIGH);
+       }
+    }
+    lastMotionTime = 0; // Reset timer
+  }
+
+  // Tunda sedikit untuk stabilitas
   delay(100);
-}
-
-// --- HELPER FUNCTIONS ---
-
-/**
- * Updates all LEDs based on a forced state or their individual states.
- * If a forcedState (true for ON, false for OFF) is provided,
- * it overrides the individual states. Otherwise, it uses the global `allLightsOn` state.
- */
-void updateAllLeds(bool forcedState) {
-    // This overload is for the PIR sensor to force lights ON/OFF
-    for (int i = 0; i < numLeds; i++) {
-        ledStates[i] = forcedState;
-        digitalWrite(ledPins[i], forcedState ? LOW : HIGH); // ACTIVE LOW
-    }
-}
-
-void updateAllLeds() {
-    // This overload is for the physical button toggle
-    for (int i = 0; i < numLeds; i++) {
-        ledStates[i] = allLightsOn;
-        digitalWrite(ledPins[i], allLightsOn ? LOW : HIGH); // ACTIVE LOW
-    }
-}
-
-/**
- * Interrupt Service Routine for the button.
- * It's kept short and simple, only setting a flag.
- */
-void IRAM_ATTR handleButtonInterrupt() {
-  buttonPressed = true;
 }
