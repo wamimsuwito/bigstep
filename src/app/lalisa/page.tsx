@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 const LIGHT_CONTROL_SERVICE_UUID = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
 const LIGHT_CONTROL_CHARACTERISTIC_UUID = 'beb5483e-36e1-4688-b7f5-ea07361b26a8';
 
-type LightName = 'Lampu Belajar' | 'Lampu Tidur' | 'Lampu Meja Rias' | 'Lampu Lemari';
+type LightName = 'Ruang Tamu' | 'Kamar Mandi' | 'Ruang Dapur' | 'Lampu Teras';
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
 interface Light {
@@ -23,10 +23,10 @@ interface Light {
 }
 
 const initialLights: Light[] = [
-  { id: 1, name: 'Lampu Belajar', isOn: false },
-  { id: 2, name: 'Lampu Tidur', isOn: false },
-  { id: 3, name: 'Lampu Meja Rias', isOn: false },
-  { id: 4, name: 'Lampu Lemari', isOn: false },
+  { id: 1, name: 'Ruang Tamu', isOn: false },
+  { id: 2, name: 'Kamar Mandi', isOn: false },
+  { id: 3, name: 'Ruang Dapur', isOn: false },
+  { id: 4, name: 'Lampu Teras', isOn: false },
 ];
 
 export default function LalisaPage() {
@@ -127,7 +127,7 @@ export default function LalisaPage() {
       <Card className="w-full max-w-lg border-primary/20 shadow-lg">
         <CardHeader className="text-center">
           <CardTitle className="text-3xl font-bold text-primary tracking-wider">Lisa Home Control</CardTitle>
-          <CardDescription>Kontrol Lampu Kamar Lisa!</CardDescription>
+          <CardDescription>Kontrol Lampu Rumah via Bluetooth</CardDescription>
         </CardHeader>
         <CardContent className="space-y-8">
             <div className="flex flex-col md:flex-row justify-center items-center gap-4 p-4 rounded-lg bg-muted/50">
