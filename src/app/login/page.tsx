@@ -155,6 +155,8 @@ export default function LoginPage() {
             router.push('/helper-logistik');
         } else if (jabatan === 'VIEWER') {
             router.push('/viewer');
+        } else if (jabatan === 'LALISA') {
+            router.push('/lalisa');
         } else {
             toast({
                 variant: 'destructive',
