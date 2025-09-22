@@ -123,14 +123,14 @@ export default function LalisaPage() {
   };
 
   return (
-    <div className="flex min-h-screen w-full flex-col items-center p-4 sm:p-8 bg-background">
-      <Card className="w-full max-w-4xl border-primary/20 shadow-lg">
+    <div className="flex min-h-screen w-full flex-col items-center justify-center p-4 sm:p-8 bg-background">
+      <Card className="w-full max-w-lg border-primary/20 shadow-lg">
         <CardHeader className="text-center">
           <CardTitle className="text-3xl font-bold text-primary tracking-wider">Lisa Home Control</CardTitle>
           <CardDescription>Kontrol Lampu Kamar Lisa!</CardDescription>
         </CardHeader>
         <CardContent className="space-y-8">
-            <div className="flex justify-center items-center gap-4 p-4 rounded-lg bg-muted/50">
+            <div className="flex flex-col md:flex-row justify-center items-center gap-4 p-4 rounded-lg bg-muted/50">
               {connectionStatus === 'connected' ? (
                  <Button onClick={handleDisconnect} variant="destructive" className="w-full md:w-auto">
                     <Power className="mr-2" /> Putuskan Koneksi
@@ -150,7 +150,7 @@ export default function LalisaPage() {
                </div>
             </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {lights.map(light => (
               <Card
                 key={light.id}
@@ -160,15 +160,15 @@ export default function LalisaPage() {
                   light.isOn ? 'bg-primary/90 text-primary-foreground' : 'bg-secondary hover:bg-secondary/80'
                 )}
               >
-                <CardContent className="flex flex-col items-center justify-center p-6 gap-4">
+                <CardContent className="flex flex-col items-center justify-center p-4 gap-2">
                   {light.isOn ? (
-                    <Lightbulb className="w-16 h-16 text-yellow-300 drop-shadow-lg" />
+                    <Lightbulb className="w-12 h-12 text-yellow-300 drop-shadow-lg" />
                   ) : (
-                    <LightbulbOff className="w-16 h-16 text-muted-foreground" />
+                    <LightbulbOff className="w-12 h-12 text-muted-foreground" />
                   )}
                   <div className="text-center">
-                    <p className="font-bold text-lg">{light.name}</p>
-                    <p className={cn("text-sm font-semibold uppercase tracking-widest", light.isOn ? 'text-yellow-300' : 'text-muted-foreground')}>
+                    <p className="font-bold text-base">{light.name}</p>
+                    <p className={cn("text-xs font-semibold uppercase tracking-widest", light.isOn ? 'text-yellow-300' : 'text-muted-foreground')}>
                       {light.isOn ? 'NYALA' : 'MATI'}
                     </p>
                   </div>
