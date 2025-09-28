@@ -7,7 +7,7 @@ import { getDatabase, ref, onValue, set } from 'firebase/database';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Lightbulb, LightbulbOff, AirVent, Fan, DoorOpen, DoorClosed, Camera, Sun, Moon, Run } from 'lucide-react';
+import { Loader2, Lightbulb, LightbulbOff, AirVent, Fan, DoorOpen, DoorClosed, Camera, Sun, Moon, PersonStanding } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { UserData } from '@/lib/types';
 import { useRouter } from 'next/navigation';
@@ -89,7 +89,7 @@ const SensorCard = ({ sensor }: { sensor: Sensor }) => {
   let Icon, label, colorClass;
 
   if (name === 'Sensor Gerak') {
-    Icon = Run;
+    Icon = PersonStanding;
     label = state ? 'Gerakan Terdeteksi' : 'Aman';
     colorClass = state ? 'text-destructive' : 'text-green-500';
   } else { // Sensor Cahaya
