@@ -3,12 +3,12 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore, collection, getDocs, getDoc, setDoc, doc, addDoc, updateDoc, deleteDoc, serverTimestamp, onSnapshot, Timestamp, query, where, limit, orderBy, runTransaction, FieldValue, increment, writeBatch } from 'firebase/firestore';
 
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: "AIzaSyDQHD5hWDvY_Jp7kTsvOJ4Yei_fRYVgA3Y",
   authDomain: "batchscale-monitor.firebaseapp.com",
-  databaseURL: "https://batchscale-monitor.firebaseio.com",
+  databaseURL: "https://batchscale-monitor-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId: "batchscale-monitor",
-  storageBucket: "batchscale-monitor.firebasestorage.app",
+  storageBucket: "batchscale-monitor.appspot.com",
   messagingSenderId: "425726816093",
   appId: "1:425726816093:web:93af9e102298d4d07082b4"
 };

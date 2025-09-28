@@ -2,8 +2,8 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { db } from '@/lib/firebase';
-import { ref, onValue, set, update } from 'firebase/database';
+import { getApps, getApp, initializeApp } from 'firebase/app';
+import { getDatabase, ref, onValue, set } from 'firebase/database';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -11,7 +11,7 @@ import { Loader2, Lightbulb, LightbulbOff, AirVent, Fan, DoorOpen, DoorClosed, C
 import { cn } from '@/lib/utils';
 import type { UserData } from '@/lib/types';
 import { useRouter } from 'next/navigation';
-
+import { firebaseConfig } from '@/lib/firebase'; // Menggunakan config dari file firebase yang ada
 
 interface Device {
   id: string;
@@ -47,6 +47,10 @@ const initialSensors: Omit<Sensor, 'state' | 'last_triggered'>[] = [
   { id: 'sensor_gerak', name: 'Sensor Gerak', pin: 13 },
   { id: 'sensor_cahaya', name: 'Sensor Cahaya', pin: 12 },
 ];
+
+// Initialize Firebase
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+const db = getDatabase(app); // Dapatkan instance Realtime Database
 
 const DeviceCard = ({ device, onToggle, isUpdating }: { device: Device, onToggle: (id: string, currentState: boolean) => void, isUpdating: boolean }) => {
   const { name, type, state } = device;
