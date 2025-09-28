@@ -2,13 +2,16 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabaseClient';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { db } from '@/lib/firebase';
+import { ref, onValue, set, update } from 'firebase/database';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Power, Lightbulb, LightbulbOff, AirVent, Fan, DoorOpen, DoorClosed, Camera, Sun, Moon, Run, AlertTriangle } from 'lucide-react';
+import { Loader2, Lightbulb, LightbulbOff, AirVent, Fan, DoorOpen, DoorClosed, Camera, Sun, Moon, Run } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { UserData } from '@/lib/types';
+import { useRouter } from 'next/navigation';
+
 
 interface Device {
   id: string;
@@ -110,65 +113,52 @@ export default function LalisaPage() {
   const [loading, setLoading] = useState(true);
   const [updatingDevices, setUpdatingDevices] = useState<string[]>([]);
   const { toast } = useToast();
-
-  const fetchInitialState = useCallback(async () => {
-    setLoading(true);
-    const { data: deviceData, error: deviceError } = await supabase.from('devices').select('*');
-    const { data: sensorData, error: sensorError } = await supabase.from('sensors').select('*');
-
-    if (deviceError || sensorError) {
-      toast({ title: 'Gagal Memuat Status', description: deviceError?.message || sensorError?.message, variant: 'destructive' });
-    } else {
-      const mergedDevices = initialDevices.map(d => {
-        const dbDevice = deviceData.find(db_d => db_d.id === d.id);
-        return { ...d, state: dbDevice ? dbDevice.state : false };
-      });
-      const mergedSensors = initialSensors.map(s => {
-        const dbSensor = sensorData.find(db_s => db_s.id === s.id);
-        return { ...s, state: dbSensor ? dbSensor.state : false, last_triggered: dbSensor ? dbSensor.last_triggered : null };
-      });
-      setDevices(mergedDevices);
-      setSensors(mergedSensors);
-    }
-    setLoading(false);
-  }, [toast]);
+  const router = useRouter();
 
   useEffect(() => {
-    fetchInitialState();
+    const devicesRef = ref(db, 'devices/');
+    const unsubscribeDevices = onValue(devicesRef, (snapshot) => {
+      const data = snapshot.val();
+      const mergedDevices = initialDevices.map(d => ({
+          ...d,
+          state: data?.[d.id]?.state ?? false
+      }));
+      setDevices(mergedDevices);
+      setLoading(false);
+    });
 
-    const deviceChannel = supabase.channel('devices')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'devices' }, (payload) => {
-        const updatedDevice = payload.new as Device;
-        setDevices(prev => prev.map(d => d.id === updatedDevice.id ? { ...d, state: updatedDevice.state } : d));
-      })
-      .subscribe();
-      
-    const sensorChannel = supabase.channel('sensors')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sensors' }, (payload) => {
-        const updatedSensor = payload.new as Sensor;
-        setSensors(prev => prev.map(s => s.id === updatedSensor.id ? { ...s, state: updatedSensor.state, last_triggered: updatedSensor.last_triggered } : s));
-      })
-      .subscribe();
+    const sensorsRef = ref(db, 'sensors/');
+    const unsubscribeSensors = onValue(sensorsRef, (snapshot) => {
+        const data = snapshot.val();
+        const mergedSensors = initialSensors.map(s => ({
+            ...s,
+            state: data?.[s.id]?.state ?? false,
+            last_triggered: data?.[s.id]?.last_triggered ?? null,
+        }));
+        setSensors(mergedSensors);
+    });
 
     return () => {
-      supabase.removeChannel(deviceChannel);
-      supabase.removeChannel(sensorChannel);
+      unsubscribeDevices();
+      unsubscribeSensors();
     };
-  }, [fetchInitialState]);
+  }, []);
 
   const handleToggleDevice = async (id: string, currentState: boolean) => {
     setUpdatingDevices(prev => [...prev, id]);
-    const { error } = await supabase.from('devices').update({ state: !currentState, updated_at: new Date().toISOString() }).eq('id', id);
-    if (error) {
-      toast({ title: 'Gagal Mengubah Status', description: error.message, variant: 'destructive' });
+    try {
+        const deviceRef = ref(db, 'devices/' + id);
+        await set(deviceRef, { state: !currentState });
+    } catch (error: any) {
+        toast({ title: 'Gagal Mengubah Status', description: error.message, variant: 'destructive' });
+    } finally {
+        setTimeout(() => {
+            setUpdatingDevices(prev => prev.filter(dId => dId !== id));
+        }, 500);
     }
-    setTimeout(() => {
-        setUpdatingDevices(prev => prev.filter(dId => dId !== id));
-    }, 500); // Give some feedback time
   };
   
-  // NOTE: Ganti dengan alamat IP CCTV Anda
-  const cctvAddress = "http://192.168.1.100:8080";
+  const cctvAddress = "#"; 
 
   if (loading) {
     return <div className="flex h-screen w-full items-center justify-center"><Loader2 className="h-10 w-10 animate-spin text-primary"/></div>;
