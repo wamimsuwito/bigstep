@@ -14,9 +14,7 @@ import { useRouter } from 'next/navigation';
 import { firebaseConfig } from '@/lib/firebase';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
-
 // --- Data Structures and Initial States ---
-
 interface Device {
   id: string;
   name: string;
@@ -63,16 +61,13 @@ const rtdb = getDatabase(rtdbApp);
 
 
 // --- UI Components ---
-
 const DeviceCard = ({ device, onToggle, isUpdating }: { device: Device, onToggle: (id: string, currentState: boolean) => void, isUpdating: boolean }) => {
   const { name, type, state } = device;
-  
   const icons = {
     light: { on: Lightbulb, off: LightbulbOff },
     ac: { on: AirVent, off: Fan },
     door: { on: DoorOpen, off: DoorClosed },
   };
-
   const Icon = state ? icons[type].on : icons[type].off;
 
   return (
@@ -123,15 +118,14 @@ const SensorCard = ({ sensor }: { sensor: Sensor }) => {
   );
 };
 
-
 // --- Main Page Component ---
-
 export default function LalisaPage() {
   const router = useRouter();
   const { toast } = useToast();
 
   // State Management
   const [userInfo, setUserInfo] = useState<UserData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [devices, setDevices] = useState<Device[]>(initialDevices);
   const [sensors, setSensors] = useState<Sensor[]>(initialSensors);
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
@@ -139,16 +133,17 @@ export default function LalisaPage() {
   const [updatingDevices, setUpdatingDevices] = useState<string[]>([]);
   
   useEffect(() => {
+    // This effect runs only on the client
+    setIsLoading(true);
     const userString = localStorage.getItem('user');
     if (userString) {
       setUserInfo(JSON.parse(userString));
     } else {
       router.push('/login');
     }
+    setIsLoading(false);
   }, [router]);
 
-
-  // Function to establish Firebase connection and listeners
   const connectToFirebase = useCallback(() => {
     setConnectionStatus('connecting');
     setErrorMessage(null);
@@ -158,13 +153,25 @@ export default function LalisaPage() {
     
     let devicesUnsubscribe: Unsubscribe | null = null;
     let sensorsUnsubscribe: Unsubscribe | null = null;
+    let connectionTimeout: NodeJS.Timeout;
 
     const cleanup = () => {
         if (devicesUnsubscribe) devicesUnsubscribe();
         if (sensorsUnsubscribe) sensorsUnsubscribe();
+        if (connectionTimeout) clearTimeout(connectionTimeout);
     };
 
+    // Timeout to handle cases where Firebase rules block connection silently
+    connectionTimeout = setTimeout(() => {
+      if (connectionStatus === 'connecting') {
+        setErrorMessage("Koneksi timeout. Periksa aturan keamanan Firebase Realtime Database Anda. Untuk prototyping, atur rules menjadi: { \".read\": \"true\", \".write\": \"true\" }.");
+        setConnectionStatus('error');
+        cleanup();
+      }
+    }, 10000); // 10-second timeout
+
     devicesUnsubscribe = onValue(devicesRef, (snapshot) => {
+        clearTimeout(connectionTimeout); // Connection successful
         const data = snapshot.val();
         if (data) {
             setDevices(prevDevices => prevDevices.map(d => ({ ...d, state: data[d.id]?.state ?? d.state })));
@@ -172,7 +179,7 @@ export default function LalisaPage() {
         setConnectionStatus('connected');
     }, (error) => {
         console.error("Firebase devices listener error:", error);
-        setErrorMessage("Koneksi ke data perangkat gagal. Periksa aturan keamanan Firebase RTDB Anda. Aturan harus mengizinkan pembacaan.");
+        setErrorMessage(`Koneksi ke data perangkat gagal: ${error.message}. Periksa aturan keamanan Firebase RTDB Anda.`);
         setConnectionStatus('error');
         cleanup();
     });
@@ -184,13 +191,12 @@ export default function LalisaPage() {
         }
     }, (error) => {
         console.error("Firebase sensors listener error:", error);
-        setErrorMessage("Koneksi ke data sensor gagal.");
-        setConnectionStatus('error');
-        cleanup();
+        // This is a secondary listener, so we don't set the main error state here
+        // to avoid overwriting a more critical error from the devices listener.
     });
 
     return cleanup;
-  }, []);
+  }, [connectionStatus]);
 
   const handleToggleDevice = async (id: string, currentState: boolean) => {
     if (connectionStatus !== 'connected') {
@@ -199,9 +205,9 @@ export default function LalisaPage() {
     }
     setUpdatingDevices(prev => [...prev, id]);
     try {
-        await set(ref(rtdb, `devices/${id}`), { state: !currentState });
+        await set(ref(rtdb, `devices/${id}/state`), !currentState);
     } catch (error: any) {
-        toast({ title: 'Gagal Mengubah Status', description: error.message, variant: 'destructive' });
+        toast({ title: 'Gagal Mengubah Status', description: `Gagal menulis ke database: ${error.message}`, variant: 'destructive' });
     } finally {
         setTimeout(() => setUpdatingDevices(prev => prev.filter(dId => dId !== id)), 500);
     }
@@ -209,7 +215,6 @@ export default function LalisaPage() {
 
   const cctvAddress = "#"; 
 
-  // Render logic based on connection status
   const renderConnectionButton = () => {
     switch(connectionStatus) {
         case 'connecting':
@@ -222,6 +227,14 @@ export default function LalisaPage() {
         default:
             return <Button onClick={connectToFirebase} className="w-full"><WifiOff className="mr-2 h-4 w-4" />Hubungkan ke Perangkat</Button>;
     }
+  };
+  
+  if (isLoading) {
+      return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <Loader2 className="h-16 w-16 animate-spin text-primary" />
+      </div>
+    );
   }
 
   return (
