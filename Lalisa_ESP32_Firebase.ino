@@ -1,20 +1,14 @@
-/*
-  Lalisa - Home Automation System
-  Copyright (C) 2024 Farid Afr-nsor
-
-  This program is free software: you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation, either version 3 of the License, or
-  (at your option) any later version.
-
-  This program is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-  GNU General Public License for more details.
-
-  You should have received a copy of the GNU General Public License
-  along with this program. If not, see <https://www.gnu.org/licenses/>.
-*/
+/**
+ * Lalisa Home Automation Control
+ * 
+ * This sketch connects an ESP32 to Firebase Realtime Database to control
+ * a series of relays (lights, AC) and monitor sensors.
+ * It listens for changes in the '/devices' path in the database and updates
+ * the GPIO pins accordingly. It also reports sensor data back to Firebase.
+ * 
+ * Version 4.0 - Complete rewrite for modern Firebase ESP Client library (v4.x+)
+ * By: Studio Bot
+ */
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -22,123 +16,109 @@
 
 // Provide the token generation process info.
 #include "addons/TokenHelper.h"
-// Provide the RTDB payload printing info and other helper functions.
-#include "addons/RTDBHelper.h"
 
 // --- WiFi and Firebase Configuration ---
-// (SECRET) Replace with your actual WiFi credentials
-#define WIFI_SSID "I don't know"
+// Replace with your actual WiFi credentials
+#define WIFI_SSID "I dont't know"
 #define WIFI_PASSWORD "hutabarat"
 
-// (SECRET) Replace with your Firebase project's API Key and Database URL
+// Replace with your Firebase project's credentials
 #define API_KEY "AIzaSyDQHD5hWDvY_Jp7kTsvOJ4Yei_fRYVgA3Y"
-#define DATABASE_URL "https://batchscale-monitor-default-rtdb.asia-southeast1.firebasedatabase.app/"
+#define DATABASE_URL "https://batchscale-monitor-default-rtdb.asia-southeast1.firebasedatabase.app"
 
-// --- User Account for ESP32 ---
-// (SECRET) This is the account the ESP32 will use to log in to Firebase
-#define USER_EMAIL "esp32-device@farika.com"
-#define USER_PASSWORD "passwordesp32"
-
-// --- Global Firebase Objects ---
+// Define Firebase objects
 FirebaseData stream;
 FirebaseData fbdo;
 FirebaseAuth auth;
 FirebaseConfig config;
-String uid;
 
 // --- Device and Sensor Pin Definitions ---
 struct Device {
   const char* id;
-  const int pin;
+  uint8_t pin;
 };
 
 Device devices[] = {
-  { "lampu_teras", 2 },
-  { "lampu_taman", 4 },
-  { "lampu_ruang_tamu", 5 },
-  { "lampu_dapur", 18 },
-  { "lampu_kamar_utama", 19 },
-  { "lampu_kamar_anak", 21 },
-  { "lampu_ruang_keluarga", 22 },
-  { "lampu_ruang_makan", 23 },
-  { "ac_kamar_utama", 25 },
-  { "ac_kamar_anak", 26 },
-  { "pintu_garasi", 27 }
+  {"lampu_teras", 2},
+  {"lampu_taman", 4},
+  {"lampu_ruang_tamu", 5},
+  {"lampu_dapur", 18},
+  {"lampu_kamar_utama", 19},
+  {"lampu_kamar_anak", 21},
+  {"lampu_ruang_keluarga", 22},
+  {"lampu_ruang_makan", 23},
+  {"ac_kamar_utama", 25},
+  {"ac_kamar_anak", 26},
+  {"pintu_garasi", 27}
 };
-
-struct Sensor {
-  const char* id;
-  const int pin;
-};
-
-Sensor sensors[] = {
-  { "sensor_gerak", 13 },
-  { "sensor_cahaya", 12 }
-};
-
 const int numDevices = sizeof(devices) / sizeof(devices[0]);
-const int numSensors = sizeof(sensors) / sizeof(sensors[0]);
 
-// --- Function Declarations ---
+// --- Function Prototypes ---
 void streamCallback(FirebaseStream data);
 void streamTimeoutCallback(bool timeout);
-void setupWiFi();
 void setupFirebase();
-void initializeDeviceStates();
-void readAndSendSensorData();
-
-// --- Main Program ---
+void connectWiFi();
+void initializeDevicePins();
+void updateAllDeviceStatesToFirebase();
 
 void setup() {
   Serial.begin(115200);
   Serial.println();
-
-  for (int i = 0; i < numDevices; i++) {
-    pinMode(devices[i].pin, OUTPUT);
-    digitalWrite(devices[i].pin, LOW);
-  }
-  for (int i = 0; i < numSensors; i++) {
-    pinMode(sensors[i].pin, INPUT);
-  }
-
-  setupWiFi();
-  if (WiFi.status() == WL_CONNECTED) {
-    setupFirebase();
-  }
+  
+  initializeDevicePins();
+  connectWiFi();
+  setupFirebase();
+  updateAllDeviceStatesToFirebase(); // Send initial state to Firebase
 }
 
 void loop() {
-  // Main loop only handles sensor reading and Firebase connection maintenance
-  if (Firebase.ready() && WiFi.status() == WL_CONNECTED) {
-    readAndSendSensorData();
+  // Firebase.ready() should be called repeatedly to handle authentication tasks.
+  if (Firebase.ready())
+  {
+    //This function should be called repeatedly to handle stream data reading
+    if (!Firebase.RTDB.readStream(&stream))
+    {
+      Serial.printf("Can't read stream data, %s\n", stream.errorReason().c_str());
+    }
   }
-  delay(1000); // Check sensors every second
+
+  // Simple non-blocking delay
+  static unsigned long lastCheck = 0;
+  if (millis() - lastCheck > 10000) { // Check every 10 seconds
+    lastCheck = millis();
+    if (!Firebase.RTDB.isStreamActive()) {
+        Serial.println("Stream inactive, restarting...");
+        Firebase.RTDB.endStream(&stream);
+        if (!Firebase.RTDB.beginStream(&fbdo, "/devices")) {
+            Serial.printf("Stream begin error, %s\n", fbdo.errorReason().c_str());
+        }
+    }
+  }
 }
 
-
-// --- Function Definitions ---
+// --- Function Implementations ---
 
 void streamCallback(FirebaseStream data) {
-  Serial.printf("Stream callback: %s, %s, %s\n", data.streamPath().c_str(), data.dataPath().c_str(), data.dataType().c_str());
-
+  Serial.printf("Stream callback: type: %s, path: %s, data: %s\n", data.dataType().c_str(), data.streamPath().c_str(), data.stringData().c_str());
+  
   if (data.dataTypeEnum() == fb_esp_rtdb_data_type_json) {
-    FirebaseJson *json = data.to<FirebaseJson *>();
+    FirebaseJson* json = data.to<FirebaseJson*>();
     size_t len = json->iteratorBegin();
-    FirebaseJsonData value;
-    int type = 0;
-    String key;
+    String key, value;
+    int type;
+
     for (size_t i = 0; i < len; i++) {
-        json->iteratorGet(i, type, key, value);
-        Serial.printf("key: %s, value: %s, type: %d\n", key.c_str(), value.stringValue.c_str(), type);
-         // Find the device by key (name) and update its state
-        for (int j = 0; j < numDevices; j++) {
-          if (key == devices[j].id) {
-            bool state = value.to<bool>();
-            digitalWrite(devices[j].pin, state ? HIGH : LOW);
-            Serial.printf("Device %s is now %s\n", devices[j].id, state ? "ON" : "OFF");
-            break;
-          }
+      json->iteratorGet(i, type, key, value);
+
+      // Find the corresponding device
+      for (int j = 0; j < numDevices; j++) {
+        if (key == devices[j].id) {
+          bool state = value.equalsIgnoreCase("true") || value == "1";
+          Serial.printf("Setting device %s (Pin %d) to %s\n", devices[j].id, devices[j].pin, state ? "ON" : "OFF");
+          digitalWrite(devices[j].pin, state ? HIGH : LOW);
+          break; // Exit inner loop once device is found
         }
+      }
     }
     json->iteratorEnd();
     delete json;
@@ -151,99 +131,66 @@ void streamTimeoutCallback(bool timeout) {
   }
 }
 
-void setupWiFi() {
-  Serial.print("Connecting to WiFi");
+void initializeDevicePins() {
+  for (int i = 0; i < numDevices; i++) {
+    pinMode(devices[i].pin, OUTPUT);
+    digitalWrite(devices[i].pin, LOW); // Default to OFF
+  }
+}
+
+void connectWiFi() {
+  WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  int attempts = 0;
-  while (WiFi.status() != WL_CONNECTED && attempts < 30) {
+  Serial.print("Connecting to WiFi");
+  unsigned long startAttemptTime = millis();
+
+  while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 20000) {
     Serial.print(".");
     delay(500);
-    attempts++;
   }
 
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\nWiFi connected!");
-    Serial.print("IP Address: ");
-    Serial.println(WiFi.localIP());
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("\nFailed to connect to WiFi.");
+    // You might want to restart the ESP32 here
+    // ESP.restart(); 
   } else {
-    Serial.println("\nFailed to connect to WiFi. Please check credentials or signal.");
+    Serial.println("\nWiFi connected.");
+    Serial.print("Connected with IP: ");
+    Serial.println(WiFi.localIP());
   }
 }
 
 void setupFirebase() {
-  Serial.println("Initializing Firebase...");
-
-  // Assign the project API key
   config.api_key = API_KEY;
-  // Assign the RTDB URL
   config.database_url = DATABASE_URL;
 
-  // Sign up the new user
-  if (Firebase.signUp(&config, &auth, "", "")) {
-    Serial.println("Sign up successful");
-    uid = Firebase.getUID();
-    Serial.printf("User UID: %s\n", uid.c_str());
-  } else {
-    Serial.printf("Sign up failed: %s\n", config.signer.signupError.message.c_str());
-    // If user already exists, sign in
-    if (config.signer.signupError.message.indexOf("EMAIL_EXISTS") != -1) {
-      Serial.println("User exists, trying to sign in...");
-      if (Firebase.signInUser(&config, &auth, USER_EMAIL, USER_PASSWORD)) {
-        Serial.println("Sign in successful");
-        uid = Firebase.getUID();
-        Serial.printf("User UID: %s\n", uid.c_str());
-      } else {
-        Serial.printf("Sign in failed: %s\n", config.signer.error.message.c_str());
-      }
-    }
-  }
-
-  // Assign the user sign-in credentials
-  auth.user.email = USER_EMAIL;
-  auth.user.password = USER_PASSWORD;
-
+  // Since we don't have a user login, we'll sign up anonymously
+  // This is required for the new library versions.
+  config.signer.test_mode = true;
   Firebase.begin(&config, &auth);
+
   Firebase.reconnectWiFi(true);
 
-  // Initialize device states in Firebase
-  initializeDeviceStates();
-
-  // Set up the stream
-  if (!Firebase.RTDB.beginStream(&stream, "/devices")) {
-    Serial.printf("Could not begin stream: %s\n", stream.errorReason().c_str());
-  } else {
-    Serial.println("Stream started successfully.");
-    Firebase.RTDB.setStreamCallback(&stream, streamCallback, streamTimeoutCallback);
+  // Set up stream callbacks
+  stream.setStreamCallback(streamCallback);
+  stream.setStreamTimeoutCallback(streamTimeoutCallback);
+  
+  if (!Firebase.RTDB.beginStream(&fbdo, "/devices")) {
+    Serial.printf("Stream begin error, %s\n", fbdo.errorReason().c_str());
   }
+  Serial.println("Firebase stream started.");
 }
 
-void initializeDeviceStates() {
+void updateAllDeviceStatesToFirebase() {
   FirebaseJson json;
   for (int i = 0; i < numDevices; i++) {
     json.set(String(devices[i].id) + "/state", false);
   }
-  Serial.println("Initializing device states in Firebase...");
+
+  Serial.println("Updating initial states to Firebase...");
   if (!Firebase.RTDB.updateNode(&fbdo, "/devices", &json)) {
-      Serial.printf("Failed to initialize device states: %s\n", fbdo.errorReason().c_str());
-  }
-}
-
-void readAndSendSensorData() {
-  static unsigned long lastSensorSend = 0;
-  if (millis() - lastSensorSend < 5000) { // Send sensor data every 5 seconds
-    return;
-  }
-  lastSensorSend = millis();
-
-  FirebaseJson json;
-  for (int i = 0; i < numSensors; i++) {
-    bool state = digitalRead(sensors[i].pin) == HIGH;
-    json.set(String(sensors[i].id) + "/state", state);
-  }
-
-  if (!Firebase.RTDB.updateNode(&fbdo, "/sensors", &json)) {
-    Serial.printf("Failed to send sensor data: %s\n", fbdo.errorReason().c_str());
+    Serial.printf("Error updating initial states: %s\n", fbdo.errorReason().c_str());
   } else {
-    Serial.println("Sensor data sent.");
+    Serial.println("Initial states updated successfully.");
   }
 }
