@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { getApps, getApp, initializeApp } from 'firebase/app';
-import { getDatabase, ref, onValue, set } from 'firebase/database';
+import { getDatabase, ref, onValue, set, Unsubscribe } from 'firebase/database';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -121,19 +121,36 @@ export default function LalisaPage() {
   const router = useRouter();
 
   useEffect(() => {
+    let devicesUnsubscribe: Unsubscribe | null = null;
+    let sensorsUnsubscribe: Unsubscribe | null = null;
+
+    let devicesLoaded = false;
+    let sensorsLoaded = false;
+
+    const checkAllDataLoaded = () => {
+      if (devicesLoaded && sensorsLoaded) {
+        setLoading(false);
+      }
+    };
+    
     const devicesRef = ref(rtdb, 'devices/');
-    const onDevicesValueChange = onValue(devicesRef, (snapshot) => {
+    devicesUnsubscribe = onValue(devicesRef, (snapshot) => {
       const data = snapshot.val();
       const mergedDevices = initialDevices.map(d => ({
           ...d,
           state: data?.[d.id]?.state ?? false
       }));
       setDevices(mergedDevices);
-      setLoading(false);
+      devicesLoaded = true;
+      checkAllDataLoaded();
+    }, (error) => {
+        console.error("Firebase device listener error:", error);
+        toast({ title: 'Gagal memuat perangkat', variant: 'destructive'});
+        setLoading(false);
     });
 
     const sensorsRef = ref(rtdb, 'sensors/');
-    const onSensorsValueChange = onValue(sensorsRef, (snapshot) => {
+    sensorsUnsubscribe = onValue(sensorsRef, (snapshot) => {
         const data = snapshot.val();
         const mergedSensors = initialSensors.map(s => ({
             ...s,
@@ -141,13 +158,19 @@ export default function LalisaPage() {
             last_triggered: data?.[s.id]?.last_triggered ?? null,
         }));
         setSensors(mergedSensors);
+        sensorsLoaded = true;
+        checkAllDataLoaded();
+    }, (error) => {
+        console.error("Firebase sensor listener error:", error);
+        toast({ title: 'Gagal memuat sensor', variant: 'destructive'});
+        setLoading(false);
     });
 
     return () => {
-      onDevicesValueChange(); // This is how you unsubscribe with RTDB's onValue
-      onSensorsValueChange();
+      if (devicesUnsubscribe) devicesUnsubscribe();
+      if (sensorsUnsubscribe) sensorsUnsubscribe();
     };
-  }, []);
+  }, [toast]);
 
   const handleToggleDevice = async (id: string, currentState: boolean) => {
     setUpdatingDevices(prev => [...prev, id]);
