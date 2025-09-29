@@ -1,90 +1,97 @@
-/**
- * Kontrol Rumah Pintar "Lalisa" dengan Firebase & ESP32
- * 
- * Dibuat untuk: Project Aplikasi PT. Farika Riau Perkasa
- * Deskripsi:
- * - Menghubungkan ESP32 ke WiFi dan Firebase Realtime Database.
- * - Mengontrol beberapa perangkat (lampu, AC, pintu) melalui relay berdasarkan data dari Firebase.
- * - Membaca data dari sensor gerak dan cahaya, lalu mengirimkan statusnya ke Firebase.
- * - Jika sensor aktif, pin relay yang sesuai akan menyala selama 60 detik.
- * 
- * Pastikan Anda sudah menginstal pustaka berikut di Arduino IDE:
- * 1. WiFi.h (bawaan ESP32)
- * 2. Firebase ESP32 Client by Mobizt (dari Library Manager)
- * 
- * Konfigurasi Pin:
- * Perangkat (Output):
- * - Lampu Teras: GPIO 2
- * - Lampu Taman: GPIO 4
- * - Lampu Ruang Tamu: GPIO 5
- * - Lampu Dapur: GPIO 18
- * - Lampu Kamar Utama: GPIO 19
- * - Lampu Kamar Anak: GPIO 21
- * - Lampu Ruang Keluarga: GPIO 22
- * - Lampu Ruang Makan: GPIO 23
- * - AC Kamar Utama: GPIO 25
- * - AC Kamar Anak: GPIO 26
- * - Pintu Garasi: GPIO 27
- * 
- * Sensor (Input):
- * - Sensor Gerak: GPIO 13
- * - Sensor Cahaya: GPIO 12
- */
+/*
+  Aplikasi Kontrol Rumah ESP32 untuk Firebase Realtime Database
+  Dibuat untuk PT. Farika Riau Perkasa
+  Dibuat oleh: Tim Engineering
+  Versi: 2.1
+  
+  Fungsionalitas:
+  - Terhubung ke WiFi.
+  - Terhubung ke Firebase Realtime Database.
+  - Mendengarkan perubahan pada path "/devices" di Firebase.
+  - Mengontrol pin relay berdasarkan status dari Firebase.
+  - Membaca data sensor (gerak dan cahaya) dan mengirimkannya ke Firebase.
+  - Implementasi logika timer untuk sensor gerak.
+*/
 
+#include <Arduino.h>
 #include <WiFi.h>
 #include <Firebase_ESP_Client.h>
 
-// --- Konfigurasi WiFi ---
+// Masukkan kredensial WiFi Anda
 #define WIFI_SSID "i don't know"
 #define WIFI_PASSWORD "hutabarat"
 
-// --- Konfigurasi Firebase ---
+// Masukkan Konfigurasi Firebase Anda
 #define API_KEY "AIzaSyDQHD5hWDvY_Jp7kTsvOJ4Yei_fRYVgA3Y"
 #define DATABASE_URL "https://batchscale-monitor-default-rtdb.asia-southeast1.firebasedatabase.app"
+#define USER_EMAIL "user@example.com" // Bisa diisi email apa saja untuk legacy auth
+#define USER_PASSWORD "password"     // Bisa diisi password apa saja untuk legacy auth
 
-// Objek Firebase
+// Definisikan Objek Firebase
 FirebaseData stream;
+FirebaseData fbdo;
 FirebaseAuth auth;
 FirebaseConfig config;
 
-// --- Definisi Pin ---
-const int ledPins[] = {2, 4, 5, 18, 19, 21, 22, 23, 25, 26, 27};
-const char* deviceIds[] = {"lampu_teras", "lampu_taman", "lampu_ruang_tamu", "lampu_dapur", "lampu_kamar_utama", "lampu_kamar_anak", "lampu_ruang_keluarga", "lampu_ruang_makan", "ac_kamar_utama", "ac_kamar_anak", "pintu_garasi"};
-const int numDevices = sizeof(ledPins) / sizeof(ledPins[0]);
+// State untuk melacak koneksi stream
+bool stream_active = false;
 
-const int motionSensorPin = 13;
-const int lightSensorPin = 12;
+// Definisikan Pin untuk Perangkat dan Sensor
+struct Device {
+  const char* id;
+  int pin;
+};
 
-unsigned long motionTriggerTime = 0;
-unsigned long lightTriggerTime = 0;
-const unsigned long SENSOR_ACTIVE_DURATION = 60000; // 60 detik
+struct Sensor {
+  const char* id;
+  int pin;
+  bool lastState;
+  unsigned long triggerTime;
+};
 
-// Callback saat data stream diterima dari Firebase
+// Daftar perangkat yang dikontrol oleh relay
+Device ledPins[] = {
+  {"lampu_teras", 2},
+  {"lampu_taman", 4},
+  {"lampu_ruang_tamu", 5},
+  {"lampu_dapur", 18},
+  {"lampu_kamar_utama", 19},
+  {"lampu_kamar_anak", 21},
+  {"lampu_ruang_keluarga", 22},
+  {"lampu_ruang_makan", 23},
+  {"ac_kamar_utama", 25},
+  {"ac_kamar_anak", 26},
+  {"pintu_garasi", 27}
+};
+
+// Daftar sensor
+Sensor sensors[] = {
+  {"sensor_gerak", 13, false, 0},
+  {"sensor_cahaya", 12, false, 0}
+};
+
+// Callback function untuk menangani data stream
 void streamCallback(FirebaseStream data) {
-  Serial.printf("Stream path: %s, event path: %s, data type: %s, event type: %s\n",
-                data.streamPath().c_str(),
-                data.dataPath().c_str(),
-                data.dataType().c_str(),
-                data.eventType().c_str());
-
   if (data.dataType() == "json") {
     FirebaseJson *json = data.to<FirebaseJson *>();
     size_t len = json->iteratorBegin();
-    String key, value;
-    int type;
+    FirebaseJson::IteratorValue value;
 
     for (size_t i = 0; i < len; i++) {
-      json->iteratorGet(i, type, key, value);
+      int type = 0;
+      String key, val;
+      json->iteratorGet(i, type, key, val);
+      
+      // Hapus tanda kutip dari nilai string
+      val.remove(0, 1);
+      val.remove(val.length() - 1);
+      
+      bool state = (val == "true");
 
-      // Cetak data yang diterima untuk debugging
-      Serial.printf("Key: %s, Value: %s, Type: %d\n", key.c_str(), value.c_str(), type);
-
-      // Cari perangkat yang cocok dengan key dari Firebase
-      for (int j = 0; j < numDevices; j++) {
-        if (key == deviceIds[j]) {
-          bool state = (value == "true");
-          Serial.printf("Mengatur %s ke %s\n", deviceIds[j], state ? "NYALA" : "MATI");
-          digitalWrite(ledPins[j], state ? HIGH : LOW);
+      for (const auto& device : ledPins) {
+        if (key == device.id) {
+          digitalWrite(device.pin, state ? HIGH : LOW);
+          Serial.printf("Mengatur %s ke %s\n", device.id, state ? "NYALA" : "MATI");
           break;
         }
       }
@@ -94,97 +101,105 @@ void streamCallback(FirebaseStream data) {
   }
 }
 
-
-// Callback saat stream timeout
+// Callback function untuk menangani timeout stream
 void streamTimeoutCallback(bool timeout) {
   if (timeout) {
-    Serial.println("Stream timeout, akan mencoba menghubungkan kembali...");
+    Serial.println("Stream timeout, memulai ulang stream...");
+    stream_active = false;
   }
 }
 
 void setup() {
   Serial.begin(115200);
 
-  // Inisialisasi semua pin perangkat sebagai OUTPUT
-  for (int i = 0; i < numDevices; i++) {
-    pinMode(ledPins[i], OUTPUT);
-    digitalWrite(ledPins[i], LOW); // Matikan semua saat startup
+  // Inisialisasi pin relay sebagai output
+  for (const auto& device : ledPins) {
+    pinMode(device.pin, OUTPUT);
+    digitalWrite(device.pin, LOW); // Pastikan semua mati saat startup
   }
 
-  // Inisialisasi pin sensor sebagai INPUT
-  pinMode(motionSensorPin, INPUT_PULLUP);
-  pinMode(lightSensorPin, INPUT_PULLUP);
+  // Inisialisasi pin sensor sebagai input
+  for (const auto& sensor : sensors) {
+    pinMode(sensor.pin, INPUT);
+  }
 
   // Koneksi ke WiFi
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  Serial.print("Menghubungkan ke WiFi...");
+  Serial.print("Menghubungkan ke WiFi");
   while (WiFi.status() != WL_CONNECTED) {
     Serial.print(".");
     delay(300);
   }
   Serial.println();
-  Serial.print("Terhubung! Alamat IP: ");
+  Serial.print("Terhubung dengan IP: ");
   Serial.println(WiFi.localIP());
+  Serial.println();
 
   // Konfigurasi Firebase
   config.api_key = API_KEY;
   config.database_url = DATABASE_URL;
-  
-  // Karena kita menggunakan database yang terbuka, kita bisa sign up secara anonim
-  auth.user.email = "";
-  auth.user.password = "";
+  auth.user.email = USER_EMAIL;
+  auth.user.password = USER_PASSWORD;
 
+  Firebase.begin(&config, &auth);
   Firebase.reconnectWiFi(true);
 
-  // Mulai stream data dari path "devices"
-  if (!Firebase.beginStream(stream, "/devices")) {
+  // Mulai stream data dari path "/devices"
+  if (!Firebase.RTDB.beginStream(&stream, "/devices")) {
     Serial.println("Gagal memulai stream: " + stream.errorReason());
+  } else {
+    Serial.println("Stream berhasil dimulai.");
+    Firebase.RTDB.setStreamCallback(&stream, streamCallback, streamTimeoutCallback);
+    stream_active = true;
   }
-
-  Firebase.setStreamCallback(stream, streamCallback, streamTimeoutCallback);
-  
-  Serial.println("Setup selesai. Menunggu data dari Firebase...");
 }
 
 void loop() {
-  unsigned long currentTime = millis();
+  // Cek dan proses data sensor
+  for (auto& sensor : sensors) {
+    bool currentState = digitalRead(sensor.pin);
+    if (currentState != sensor.lastState) {
+      sensor.lastState = currentState;
+      if (currentState) { // Jika sensor terpicu (HIGH)
+        sensor.triggerTime = millis();
+        Serial.printf("Sensor %s terpicu!\n", sensor.id);
+        
+        // Kirim status ke Firebase
+        if (Firebase.RTDB.setBool(&fbdo, String("sensors/") + sensor.id + "/state", true)) {
+          Serial.printf("Status sensor %s dikirim ke Firebase: true\n", sensor.id);
+        } else {
+          Serial.printf("Gagal mengirim status sensor %s: %s\n", sensor.id, fbdo.errorReason().c_str());
+        }
+      }
+    }
 
-  // Logika untuk Sensor Gerak
-  bool motionDetected = digitalRead(motionSensorPin) == HIGH;
-  if (motionDetected) {
-    if (motionTriggerTime == 0) { // Hanya trigger saat pertama kali terdeteksi
-      Serial.println("Sensor Gerak Aktif! Mengirim status ke Firebase.");
-      Firebase.RTDB.setBool(&stream, "/sensors/sensor_gerak/state", true);
-      Firebase.RTDB.setString(&stream, "/sensors/sensor_gerak/last_triggered", String(currentTime));
-      motionTriggerTime = currentTime;
+    // Logika timer untuk mematikan sensor gerak setelah 60 detik
+    if (strcmp(sensor.id, "sensor_gerak") == 0 && sensor.lastState && (millis() - sensor.triggerTime > 60000)) {
+        sensor.lastState = false; // Reset state secara logis
+        sensor.triggerTime = 0; // Reset timer
+        Serial.println("Sensor gerak kembali ke status aman (timer).");
+        
+        // Kirim status false ke Firebase
+        if (Firebase.RTDB.setBool(&fbdo, String("sensors/") + sensor.id + "/state", false)) {
+            Serial.println("Status sensor gerak dikirim ke Firebase: false");
+        } else {
+            Serial.printf("Gagal mengirim status sensor gerak: %s\n", fbdo.errorReason().c_str());
+        }
     }
   }
 
-  if (motionTriggerTime != 0 && currentTime - motionTriggerTime > SENSOR_ACTIVE_DURATION) {
-    Serial.println("Sensor Gerak non-aktif setelah 60 detik.");
-    Firebase.RTDB.setBool(&stream, "/sensors/sensor_gerak/state", false);
-    motionTriggerTime = 0;
-  }
-
-  // Logika untuk Sensor Cahaya (Asumsi HIGH = Terang, LOW = Gelap)
-  bool isLight = digitalRead(lightSensorPin) == HIGH;
-  // Cek apakah status berubah sebelum mengirim update
-  static bool lastLightState = !isLight;
-  if (isLight != lastLightState) {
-    Serial.printf("Sensor Cahaya berubah: %s. Mengirim status ke Firebase.\n", isLight ? "Terang" : "Gelap");
-    Firebase.RTDB.setBool(&stream, "/sensors/sensor_cahaya/state", isLight);
-    lastLightState = isLight;
-  }
-
-
-  // Cek koneksi stream secara berkala
-  if (!stream.httpConnected()) {
-    Serial.println("Stream terputus! Error: " + stream.errorReason());
+  // Cek apakah stream perlu dimulai ulang
+  if (!stream_active) {
     Serial.println("Mencoba memulai ulang stream...");
-    if (!Firebase.beginStream(stream, "/devices")) {
+    if (Firebase.RTDB.beginStream(&stream, "/devices")) {
+      Firebase.RTDB.setStreamCallback(&stream, streamCallback, streamTimeoutCallback);
+      stream_active = true;
+      Serial.println("Stream berhasil dimulai ulang.");
+    } else {
       Serial.println("Gagal memulai ulang stream: " + stream.errorReason());
+      delay(2000); // Tunggu sebelum mencoba lagi
     }
   }
 
-  delay(100); // Delay singkat untuk stabilitas
+  delay(100); // Delay kecil untuk stabilitas
 }
