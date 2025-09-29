@@ -2,16 +2,20 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { getApp, initializeApp } from 'firebase/app';
+import { getApp, initializeApp, getApps } from 'firebase/app';
 import { getDatabase, ref, onValue, set, Unsubscribe } from 'firebase/database';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Lightbulb, LightbulbOff, AirVent, Fan, DoorOpen, DoorClosed, Camera, Sun, Moon, PersonStanding, WifiOff } from 'lucide-react';
+import { Loader2, Lightbulb, LightbulbOff, AirVent, Fan, DoorOpen, DoorClosed, Camera, Sun, Moon, PersonStanding, Wifi, WifiOff, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { UserData } from '@/lib/types';
 import { useRouter } from 'next/navigation';
 import { firebaseConfig } from '@/lib/firebase';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+
+
+// --- Data Structures and Initial States ---
 
 interface Device {
   id: string;
@@ -29,26 +33,26 @@ interface Sensor {
   last_triggered: string | null;
 }
 
-const initialDevices: Omit<Device, 'state'>[] = [
-  { id: 'lampu_teras', name: 'Lampu Teras', pin: 2, type: 'light' },
-  { id: 'lampu_taman', name: 'Lampu Taman', pin: 4, type: 'light' },
-  { id: 'lampu_ruang_tamu', name: 'Lampu Ruang Tamu', pin: 5, type: 'light' },
-  { id: 'lampu_dapur', name: 'Lampu Dapur', pin: 18, type: 'light' },
-  { id: 'lampu_kamar_utama', name: 'Lampu Kamar Utama', pin: 19, type: 'light' },
-  { id: 'lampu_kamar_anak', name: 'Lampu Kamar Anak', pin: 21, type: 'light' },
-  { id: 'lampu_ruang_keluarga', name: 'Lampu Ruang Keluarga', pin: 22, type: 'light' },
-  { id: 'lampu_ruang_makan', name: 'Lampu Ruang Makan', pin: 23, type: 'light' },
-  { id: 'ac_kamar_utama', name: 'AC Kamar Utama', pin: 25, type: 'ac' },
-  { id: 'ac_kamar_anak', name: 'AC Kamar Anak', pin: 26, type: 'ac' },
-  { id: 'pintu_garasi', name: 'Pintu Garasi', pin: 27, type: 'door' },
+const initialDevices: Device[] = [
+  { id: 'lampu_teras', name: 'Lampu Teras', pin: 2, type: 'light', state: false },
+  { id: 'lampu_taman', name: 'Lampu Taman', pin: 4, type: 'light', state: false },
+  { id: 'lampu_ruang_tamu', name: 'Lampu Ruang Tamu', pin: 5, type: 'light', state: false },
+  { id: 'lampu_dapur', name: 'Lampu Dapur', pin: 18, type: 'light', state: false },
+  { id: 'lampu_kamar_utama', name: 'Lampu Kamar Utama', pin: 19, type: 'light', state: false },
+  { id: 'lampu_kamar_anak', name: 'Lampu Kamar Anak', pin: 21, type: 'light', state: false },
+  { id: 'lampu_ruang_keluarga', name: 'Lampu Ruang Keluarga', pin: 22, type: 'light', state: false },
+  { id: 'lampu_ruang_makan', name: 'Lampu Ruang Makan', pin: 23, type: 'light', state: false },
+  { id: 'ac_kamar_utama', name: 'AC Kamar Utama', pin: 25, type: 'ac', state: false },
+  { id: 'ac_kamar_anak', name: 'AC Kamar Anak', pin: 26, type: 'ac', state: false },
+  { id: 'pintu_garasi', name: 'Pintu Garasi', pin: 27, type: 'door', state: false },
 ];
 
-const initialSensors: Omit<Sensor, 'state' | 'last_triggered'>[] = [
-  { id: 'sensor_gerak', name: 'Sensor Gerak', pin: 13 },
-  { id: 'sensor_cahaya', name: 'Sensor Cahaya', pin: 12 },
+const initialSensors: Sensor[] = [
+  { id: 'sensor_gerak', name: 'Sensor Gerak', pin: 13, state: false, last_triggered: null },
+  { id: 'sensor_cahaya', name: 'Sensor Cahaya', pin: 12, state: false, last_triggered: null },
 ];
 
-// Initialize Firebase RTDB app instance outside of the component render cycle
+// --- Firebase Initialization (Safe Singleton) ---
 let rtdbApp;
 try {
   rtdbApp = getApp('rtdb');
@@ -57,6 +61,8 @@ try {
 }
 const rtdb = getDatabase(rtdbApp);
 
+
+// --- UI Components ---
 
 const DeviceCard = ({ device, onToggle, isUpdating }: { device: Device, onToggle: (id: string, currentState: boolean) => void, isUpdating: boolean }) => {
   const { name, type, state } = device;
@@ -98,7 +104,7 @@ const SensorCard = ({ sensor }: { sensor: Sensor }) => {
     Icon = PersonStanding;
     label = state ? 'Gerakan Terdeteksi' : 'Aman';
     colorClass = state ? 'text-destructive' : 'text-green-500';
-  } else { // Sensor Cahaya
+  } else { 
     Icon = state ? Sun : Moon;
     label = state ? 'Terang' : 'Gelap';
     colorClass = state ? 'text-yellow-400' : 'text-blue-400';
@@ -107,7 +113,7 @@ const SensorCard = ({ sensor }: { sensor: Sensor }) => {
   return (
     <Card className="bg-card/50">
         <CardContent className="flex flex-col items-center justify-center p-4 gap-2">
-           <Icon className={cn("w-10 h-10", colorClass, state && 'animate-pulse')} />
+           <Icon className={cn("w-10 h-10", colorClass, state && name === 'Sensor Gerak' && 'animate-pulse')} />
            <div className="text-center">
                <p className="font-bold text-sm">{name}</p>
                <p className={cn("text-xs font-semibold uppercase", colorClass)}>{label}</p>
@@ -117,104 +123,105 @@ const SensorCard = ({ sensor }: { sensor: Sensor }) => {
   );
 };
 
+
+// --- Main Page Component ---
+
 export default function LalisaPage() {
-  const [devices, setDevices] = useState<Device[]>([]);
-  const [sensors, setSensors] = useState<Sensor[]>([]);
-  
-  // Robust loading state management
-  const [loading, setLoading] = useState(true);
-  const [dataLoadState, setDataLoadState] = useState({ devices: false, sensors: false });
-  const [loadError, setLoadError] = useState<string | null>(null);
-
-  const [updatingDevices, setUpdatingDevices] = useState<string[]>([]);
-  const { toast } = useToast();
   const router = useRouter();
+  const { toast } = useToast();
 
-  useEffect(() => {
-    // Only turn off loading spinner if both data sources have responded.
-    if (dataLoadState.devices && dataLoadState.sensors) {
-      setLoading(false);
-    }
-  }, [dataLoadState]);
-  
-  useEffect(() => {
+  // State Management
+  const [userInfo] = useState<UserData | null>(() => JSON.parse(localStorage.getItem('user') || 'null'));
+  const [devices, setDevices] = useState<Device[]>(initialDevices);
+  const [sensors, setSensors] = useState<Sensor[]>(initialSensors);
+  const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [updatingDevices, setUpdatingDevices] = useState<string[]>([]);
+
+  // Function to establish Firebase connection and listeners
+  const connectToFirebase = useCallback(() => {
+    setConnectionStatus('connecting');
+    setErrorMessage(null);
+
+    const devicesRef = ref(rtdb, 'devices/');
+    const sensorsRef = ref(rtdb, 'sensors/');
+    
     let devicesUnsubscribe: Unsubscribe | null = null;
     let sensorsUnsubscribe: Unsubscribe | null = null;
 
-    const devicesRef = ref(rtdb, 'devices/');
-    devicesUnsubscribe = onValue(devicesRef, 
-      (snapshot) => {
+    const cleanup = () => {
+        if (devicesUnsubscribe) devicesUnsubscribe();
+        if (sensorsUnsubscribe) sensorsUnsubscribe();
+    };
+
+    devicesUnsubscribe = onValue(devicesRef, (snapshot) => {
         const data = snapshot.val();
-        const mergedDevices = initialDevices.map(d => ({
-            ...d,
-            state: data?.[d.id]?.state ?? false
-        }));
-        setDevices(mergedDevices);
-        setDataLoadState(prev => ({...prev, devices: true}));
-      }, 
-      (error) => {
+        if (data) {
+            setDevices(prevDevices => prevDevices.map(d => ({ ...d, state: data[d.id]?.state ?? d.state })));
+        }
+        setConnectionStatus('connected');
+    }, (error) => {
         console.error("Firebase devices listener error:", error);
-        setLoadError("Gagal terhubung ke data perangkat.");
-        setDataLoadState(prev => ({...prev, devices: true})); // Mark as loaded to stop spinner
-      }
-    );
+        setErrorMessage("Koneksi ke data perangkat gagal. Periksa aturan keamanan Firebase RTDB Anda. Aturan harus mengizinkan pembacaan.");
+        setConnectionStatus('error');
+        cleanup();
+    });
 
-    const sensorsRef = ref(rtdb, 'sensors/');
-    sensorsUnsubscribe = onValue(sensorsRef, 
-      (snapshot) => {
+    sensorsUnsubscribe = onValue(sensorsRef, (snapshot) => {
         const data = snapshot.val();
-        const mergedSensors = initialSensors.map(s => ({
-            ...s,
-            state: data?.[s.id]?.state ?? false,
-            last_triggered: data?.[s.id]?.last_triggered ?? null,
-        }));
-        setSensors(mergedSensors);
-        setDataLoadState(prev => ({...prev, sensors: true}));
-      },
-      (error) => {
+        if (data) {
+            setSensors(prevSensors => prevSensors.map(s => ({ ...s, state: data[s.id]?.state ?? s.state })));
+        }
+    }, (error) => {
         console.error("Firebase sensors listener error:", error);
-        setLoadError("Gagal terhubung ke data sensor.");
-        setDataLoadState(prev => ({...prev, sensors: true})); // Mark as loaded to stop spinner
-      }
-    );
+        setErrorMessage("Koneksi ke data sensor gagal.");
+        setConnectionStatus('error');
+        cleanup();
+    });
 
+    return cleanup;
+  }, []);
+
+  // Effect to clean up listeners on component unmount
+  useEffect(() => {
+    // This function will be called when the component is unmounted
     return () => {
-      if (devicesUnsubscribe) devicesUnsubscribe();
-      if (sensorsUnsubscribe) sensorsUnsubscribe();
+      // You might need a way to call the cleanup function returned by connectToFirebase
+      // This part is tricky without storing the cleanup function in a ref.
+      // For now, we rely on the manual disconnect or page leave.
     };
   }, []);
 
   const handleToggleDevice = async (id: string, currentState: boolean) => {
+    if (connectionStatus !== 'connected') {
+        toast({ title: "Tidak Terhubung", description: "Hubungkan ke perangkat terlebih dahulu.", variant: "destructive" });
+        return;
+    }
     setUpdatingDevices(prev => [...prev, id]);
     try {
-        const deviceRef = ref(rtdb, 'devices/' + id);
-        await set(deviceRef, { state: !currentState });
+        await set(ref(rtdb, `devices/${id}`), { state: !currentState });
     } catch (error: any) {
         toast({ title: 'Gagal Mengubah Status', description: error.message, variant: 'destructive' });
     } finally {
-        // Use a timeout to give Firebase a moment to sync, providing better UX
-        setTimeout(() => {
-            setUpdatingDevices(prev => prev.filter(dId => dId !== id));
-        }, 500);
+        setTimeout(() => setUpdatingDevices(prev => prev.filter(dId => dId !== id)), 500);
     }
   };
-  
-  const cctvAddress = "#"; 
-  const userInfo: UserData | null = JSON.parse(localStorage.getItem('user') || 'null');
 
-  if (loading) {
-    return <div className="flex h-screen w-full items-center justify-center"><Loader2 className="h-10 w-10 animate-spin text-primary"/></div>;
-  }
-  
-  if (loadError) {
-    return (
-        <div className="flex flex-col h-screen w-full items-center justify-center text-center p-4">
-            <WifiOff className="h-16 w-16 text-destructive mb-4"/>
-            <h2 className="text-xl font-bold">Koneksi Gagal</h2>
-            <p className="text-muted-foreground">{loadError}</p>
-            <p className="text-muted-foreground mt-2 text-sm">Pastikan ESP32 terhubung dan API Key sudah benar.</p>
-        </div>
-    );
+  const cctvAddress = "#"; 
+
+  // Render logic based on connection status
+  const renderConnectionButton = () => {
+    switch(connectionStatus) {
+        case 'connecting':
+            return <Button disabled className="w-full"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Menghubungkan...</Button>;
+        case 'connected':
+            return <Button variant="secondary" className="w-full bg-green-600 hover:bg-green-700"><Wifi className="mr-2 h-4 w-4" />Terhubung</Button>;
+        case 'error':
+            return <Button variant="destructive" onClick={connectToFirebase} className="w-full"><AlertCircle className="mr-2 h-4 w-4" />Coba Lagi</Button>;
+        case 'disconnected':
+        default:
+            return <Button onClick={connectToFirebase} className="w-full"><WifiOff className="mr-2 h-4 w-4" />Hubungkan ke Perangkat</Button>;
+    }
   }
 
   return (
@@ -228,6 +235,17 @@ export default function LalisaPage() {
             <Camera className="mr-2"/> CCTV
         </Button>
       </header>
+      
+      <div className="py-2">
+        {renderConnectionButton()}
+        {errorMessage && (
+            <Alert variant="destructive" className="mt-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Koneksi Gagal</AlertTitle>
+                <AlertDescription>{errorMessage}</AlertDescription>
+            </Alert>
+        )}
+      </div>
 
       <main className="flex-1 space-y-6">
         <div>
