@@ -49,8 +49,12 @@ const initialSensors: Omit<Sensor, 'state' | 'last_triggered'>[] = [
 ];
 
 // Initialize Firebase RTDB app instance outside of the component render cycle
-const rtdbApp = getApps().find(app => app.name === 'rtdb') || initializeApp(firebaseConfig, 'rtdb');
-const rtdb = getDatabase(rtdbApp);
+try {
+  getApp('rtdb');
+} catch (e) {
+  initializeApp(firebaseConfig, 'rtdb');
+}
+const rtdb = getDatabase(getApp('rtdb'));
 
 
 const DeviceCard = ({ device, onToggle, isUpdating }: { device: Device, onToggle: (id: string, currentState: boolean) => void, isUpdating: boolean }) => {
@@ -123,16 +127,15 @@ export default function LalisaPage() {
   useEffect(() => {
     let devicesUnsubscribe: Unsubscribe | null = null;
     let sensorsUnsubscribe: Unsubscribe | null = null;
-
-    let devicesLoaded = false;
-    let sensorsLoaded = false;
+    let dataLoaded = { devices: false, sensors: false };
 
     const checkAllDataLoaded = () => {
-      if (devicesLoaded && sensorsLoaded) {
+      if (dataLoaded.devices && dataLoaded.sensors) {
         setLoading(false);
       }
     };
-    
+
+    // --- Devices Listener ---
     const devicesRef = ref(rtdb, 'devices/');
     devicesUnsubscribe = onValue(devicesRef, (snapshot) => {
       const data = snapshot.val();
@@ -141,14 +144,16 @@ export default function LalisaPage() {
           state: data?.[d.id]?.state ?? false
       }));
       setDevices(mergedDevices);
-      devicesLoaded = true;
+      dataLoaded.devices = true;
       checkAllDataLoaded();
     }, (error) => {
         console.error("Firebase device listener error:", error);
         toast({ title: 'Gagal memuat perangkat', variant: 'destructive'});
-        setLoading(false);
+        dataLoaded.devices = true;
+        checkAllDataLoaded();
     });
 
+    // --- Sensors Listener ---
     const sensorsRef = ref(rtdb, 'sensors/');
     sensorsUnsubscribe = onValue(sensorsRef, (snapshot) => {
         const data = snapshot.val();
@@ -158,12 +163,13 @@ export default function LalisaPage() {
             last_triggered: data?.[s.id]?.last_triggered ?? null,
         }));
         setSensors(mergedSensors);
-        sensorsLoaded = true;
+        dataLoaded.sensors = true;
         checkAllDataLoaded();
     }, (error) => {
         console.error("Firebase sensor listener error:", error);
         toast({ title: 'Gagal memuat sensor', variant: 'destructive'});
-        setLoading(false);
+        dataLoaded.sensors = true;
+        checkAllDataLoaded();
     });
 
     return () => {
@@ -171,6 +177,7 @@ export default function LalisaPage() {
       if (sensorsUnsubscribe) sensorsUnsubscribe();
     };
   }, [toast]);
+
 
   const handleToggleDevice = async (id: string, currentState: boolean) => {
     setUpdatingDevices(prev => [...prev, id]);
