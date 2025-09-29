@@ -131,12 +131,22 @@ export default function LalisaPage() {
   const { toast } = useToast();
 
   // State Management
-  const [userInfo] = useState<UserData | null>(() => JSON.parse(localStorage.getItem('user') || 'null'));
+  const [userInfo, setUserInfo] = useState<UserData | null>(null);
   const [devices, setDevices] = useState<Device[]>(initialDevices);
   const [sensors, setSensors] = useState<Sensor[]>(initialSensors);
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [updatingDevices, setUpdatingDevices] = useState<string[]>([]);
+  
+  useEffect(() => {
+    const userString = localStorage.getItem('user');
+    if (userString) {
+      setUserInfo(JSON.parse(userString));
+    } else {
+      router.push('/login');
+    }
+  }, [router]);
+
 
   // Function to establish Firebase connection and listeners
   const connectToFirebase = useCallback(() => {
@@ -180,16 +190,6 @@ export default function LalisaPage() {
     });
 
     return cleanup;
-  }, []);
-
-  // Effect to clean up listeners on component unmount
-  useEffect(() => {
-    // This function will be called when the component is unmounted
-    return () => {
-      // You might need a way to call the cleanup function returned by connectToFirebase
-      // This part is tricky without storing the cleanup function in a ref.
-      // For now, we rely on the manual disconnect or page leave.
-    };
   }, []);
 
   const handleToggleDevice = async (id: string, currentState: boolean) => {
