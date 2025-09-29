@@ -1,141 +1,144 @@
-// Dibuat untuk Aplikasi Kontrol Rumah "Lalisa"
-// Mikrokontroler: ESP32
-// Konektivitas: WiFi & Firebase Realtime Database
-// Dibuat oleh: Tim Aplikasi PT. Farika Riau Perkasa
+// Cek apakah pustaka sudah terinstal. Jika belum, kompilasi akan berhenti dengan pesan error di bawah.
+// Untuk mengatasinya: Buka Arduino IDE > Sketch > Include Library > Manage Libraries... > Cari "Firebase ESP32 Client" oleh Mobizt > Install.
+#ifndef Firebase_ESP_Client_H
+#error "Pustaka Firebase ESP Client belum terinstal. Silakan instal dari Library Manager (Cari 'Firebase ESP32 Client' oleh Mobizt) lalu restart Arduino IDE."
+#endif
 
-// --- PUSTAKA YANG DIPERLUKAN ---
 #include <WiFi.h>
 #include <Firebase_ESP_Client.h>
 
-// --- PENGATURAN KONEKSI (GANTI DENGAN KREDENSIAL ANDA) ---
+// --- KONFIGURASI PENTING ---
 #define WIFI_SSID "i don't know"
 #define WIFI_PASSWORD "hutabarat"
-#define API_KEY "AIzaSyDQHD5hWDvY_Jp7kTsvOJ4Yei_fRYVgA3Y"
-#define DATABASE_URL "https://batchscale-monitor-default-rtdb.asia-southeast1.firebasedatabase.app"
 
-// --- DEFINISI PIN PERANGKAT ---
-// Perangkat yang dikontrol (Lampu, AC, dll.) terhubung ke Relay
+// Ganti dengan URL Database dari Firebase Console Anda (Pengaturan Proyek > Service accounts > Database secrets)
+#define DATABASE_URL "batchscale-monitor-default-rtdb.asia-southeast1.firebasedatabase.app"
+
+// --- Pinout ESP32 ---
+// Sesuaikan nomor pin ini dengan rangkaian fisik Anda
 const int ledPins[] = {2, 4, 5, 18, 19, 21, 22, 23, 25, 26, 27};
-const char* deviceIds[] = {"lampu_teras", "lampu_taman", "lampu_ruang_tamu", "lampu_dapur", "lampu_kamar_utama", "lampu_kamar_anak", "lampu_ruang_keluarga", "lampu_ruang_makan", "ac_kamar_utama", "ac_kamar_anak", "pintu_garasi"};
-const int numDevices = sizeof(ledPins) / sizeof(ledPins[0]);
-
-// Sensor eksternal
+const char* deviceIds[] = {
+  "lampu_teras", "lampu_taman", "lampu_ruang_tamu", "lampu_dapur", 
+  "lampu_kamar_utama", "lampu_kamar_anak", "lampu_ruang_keluarga", 
+  "lampu_ruang_makan", "ac_kamar_utama", "ac_kamar_anak", "pintu_garasi"
+};
 const int motionSensorPin = 13;
 const int lightSensorPin = 12;
 
-// --- OBJEK FIREBASE ---
+// Variabel global
 FirebaseData stream;
 FirebaseData fbdo;
 FirebaseAuth auth;
 FirebaseConfig config;
+bool signupOK = false;
 
-// --- VARIABEL GLOBAL ---
+// Variabel untuk sensor
 volatile bool motionDetected = false;
-volatile unsigned long motionTriggerTime = 0;
-const unsigned long motionActiveDuration = 60000; // 60 detik
+unsigned long motionStopTime = 0;
+bool lightSensorState = false;
+unsigned long lightStopTime = 0;
 
-// Fungsi untuk menangani data stream dari Firebase
-void streamCallback(StreamData data) {
-    if (data.dataType() == "json") {
-        FirebaseJson &json = data.jsonObject();
-        size_t len = json.iteratorBegin();
-        String key, value;
-        int type;
-        for (size_t i = 0; i < len; i++) {
-            json.iteratorGet(i, type, key, value);
-            for (int j = 0; j < numDevices; j++) {
-                if (key == deviceIds[j]) {
-                    Serial.printf("Perintah diterima untuk %s: %s\n", key.c_str(), value.c_str());
-                    digitalWrite(ledPins[j], value == "true" ? HIGH : LOW);
-                }
-            }
+// Fungsi untuk menangani perubahan data dari Firebase (Callback)
+void streamCallback(FirebaseStream data) {
+  if (data.dataTypeEnum() == fb_esp_data_type_json) {
+    FirebaseJson *json = data.to<FirebaseJson>();
+    size_t len = json->iteratorBegin();
+    FirebaseJson::IteratorValue value;
+    for (size_t i = 0; i < len; i++) {
+      value = json->valueAt(i);
+      for (size_t j = 0; j < (sizeof(deviceIds) / sizeof(deviceIds[0])); j++) {
+        if (value.key == deviceIds[j]) {
+          Serial.printf("Device: %s, State: %s\n", value.key.c_str(), value.value.c_str());
+          digitalWrite(ledPins[j], value.value == "true" ? HIGH : LOW);
         }
+      }
     }
+    json->iteratorEnd();
+    delete json;
+  }
 }
 
 void streamTimeoutCallback(bool timeout) {
-    if (timeout) {
-        Serial.println("Stream timeout, akan coba lagi...");
-    }
-}
-
-// Fungsi interrupt untuk sensor gerak
-void IRAM_ATTR detectsMovement() {
-    motionDetected = true;
-    motionTriggerTime = millis();
+  if (timeout) {
+    Serial.println("Stream timeout, resuming...");
+  }
 }
 
 void setup() {
-    Serial.begin(115200);
+  Serial.begin(115200);
 
-    // Inisialisasi pin perangkat sebagai output dan set ke LOW (mati)
-    for (int i = 0; i < numDevices; i++) {
-        pinMode(ledPins[i], OUTPUT);
-        digitalWrite(ledPins[i], LOW);
-    }
-    
-    // Inisialisasi pin sensor
-    pinMode(motionSensorPin, INPUT_PULLUP);
-    attachInterrupt(digitalPinToInterrupt(motionSensorPin), detectsMovement, RISING); // Asumsi sensor HIGH saat ada gerakan
-    pinMode(lightSensorPin, INPUT);
+  // Inisialisasi semua pin perangkat sebagai OUTPUT dan set ke LOW
+  for (int pin : ledPins) {
+    pinMode(pin, OUTPUT);
+    digitalWrite(pin, LOW);
+  }
+  // Inisialisasi pin sensor
+  pinMode(motionSensorPin, INPUT_PULLUP);
+  pinMode(lightSensorPin, INPUT_PULLUP);
 
-    // Koneksi ke WiFi
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    Serial.print("Menghubungkan ke WiFi...");
-    while (WiFi.status() != WL_CONNECTED) {
-        Serial.print(".");
-        delay(300);
-    }
-    Serial.println();
-    Serial.print("Terhubung! Alamat IP: ");
-    Serial.println(WiFi.localIP());
+  // Koneksi ke WiFi
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  Serial.print("Connecting to WiFi");
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print(".");
+    delay(300);
+  }
+  Serial.println();
+  Serial.print("Connected with IP: ");
+  Serial.println(WiFi.localIP());
 
-    // Konfigurasi Firebase
-    config.api_key = API_KEY;
-    config.database_url = DATABASE_URL;
-    config.signer.test_mode = true; // Ganti ke false jika menggunakan akun service
+  // Konfigurasi Firebase
+  config.database_url = DATABASE_URL;
+  config.signer.test_mode = true; // Gunakan mode anonim
 
-    Firebase.reconnectWiFi(true);
-    fbdo.setResponseSize(4096);
-    
-    // Mulai koneksi ke Firebase
-    Firebase.begin(&config, &auth);
+  Firebase.begin(&config, &auth);
+  Firebase.reconnectWiFi(true);
 
-    // Mulai stream untuk mendengarkan perubahan pada path '/devices'
-    if (!Firebase.RTDB.beginStream(&stream, "/devices")) {
-        Serial.println("Gagal memulai stream: " + stream.errorReason());
-    }
+  // Memulai 'listening' ke path /devices di Firebase
+  if (!Firebase.RTDB.beginStream(&stream, "/devices")) {
+    Serial.printf("------------------------------------\n");
+    Serial.printf("Reason: %s\n", stream.errorReason().c_str());
+    Serial.printf("------------------------------------\n");
+  }
+  Firebase.RTDB.setStreamCallback(&stream, streamCallback, streamTimeoutCallback);
 
-    Firebase.RTDB.setStreamCallback(&stream, streamCallback, streamTimeoutCallback);
-
-    Serial.println("Setup selesai. Menunggu perintah dari aplikasi...");
+  Serial.println("Setup selesai. Menunggu perintah dari aplikasi...");
 }
 
 void loop() {
-    // Cek status sensor gerak
-    if (motionDetected) {
-        // Kirim status 'true' ke Firebase
-        Firebase.RTDB.setBool(&fbdo, "/sensors/sensor_gerak/state", true);
-        Serial.println("Gerakan terdeteksi! Mengirim status ke Firebase.");
-        motionDetected = false; // Reset flag setelah dikirim
-    }
+  // Cek sensor gerak
+  if (digitalRead(motionSensorPin) == HIGH && !motionDetected) {
+    motionDetected = true;
+    motionStopTime = millis() + 60000; // Set timer untuk 60 detik
+    digitalWrite(ledPins[0], HIGH); // Contoh: menyalakan lampu teras
+    Firebase.RTDB.setBool(&fbdo, "/sensors/sensor_gerak/state", true);
+    Serial.println("Gerakan terdeteksi! Relay aktif selama 60 detik.");
+  }
+  
+  // Matikan relay sensor gerak setelah 60 detik
+  if (motionDetected && millis() >= motionStopTime) {
+    motionDetected = false;
+    digitalWrite(ledPins[0], LOW);
+    Firebase.RTDB.setBool(&fbdo, "/sensors/sensor_gerak/state", false);
+    Serial.println("Relay sensor gerak dimatikan.");
+  }
 
-    // Cek apakah durasi aktif sensor gerak sudah habis
-    if (motionTriggerTime > 0 && millis() - motionTriggerTime > motionActiveDuration) {
-        // Kirim status 'false' kembali ke Firebase
-        Firebase.RTDB.setBool(&fbdo, "/sensors/sensor_gerak/state", false);
-        Serial.println("Durasi sensor gerak selesai. Mengirim status non-aktif.");
-        motionTriggerTime = 0; // Reset timer
+  // Cek sensor cahaya
+  bool currentLightState = (digitalRead(lightSensorPin) == HIGH);
+  if (currentLightState != lightSensorState) {
+    lightSensorState = currentLightState;
+    Firebase.RTDB.setBool(&fbdo, "/sensors/sensor_cahaya/state", lightSensorState);
+    Serial.printf("Sensor cahaya: %s\n", lightSensorState ? "Terang" : "Gelap");
+    if(lightSensorState == false) { // Jika gelap
+        lightStopTime = millis() + 60000;
+        digitalWrite(ledPins[1], HIGH); // Contoh: nyalakan lampu taman
     }
+  }
 
-    // Cek status sensor cahaya (contoh sederhana: HIGH = terang, LOW = gelap)
-    bool isLight = digitalRead(lightSensorPin) == HIGH;
-    static bool lastLightState = !isLight;
-    if (isLight != lastLightState) {
-        Firebase.RTDB.setBool(&fbdo, "/sensors/sensor_cahaya/state", isLight);
-        Serial.printf("Sensor cahaya berubah: %s\n", isLight ? "Terang" : "Gelap");
-        lastLightState = isLight;
-    }
+  // Matikan relay sensor cahaya setelah 60 detik jika kondisi gelap
+  if(!lightSensorState && millis() >= lightStopTime) {
+      digitalWrite(ledPins[1], LOW);
+  }
 
-    delay(200); // Penundaan singkat untuk stabilitas
+  delay(100); // Penundaan singkat untuk stabilitas
 }
