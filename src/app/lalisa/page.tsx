@@ -2,12 +2,12 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { getApps, getApp, initializeApp } from 'firebase/app';
+import { getApp, initializeApp } from 'firebase/app';
 import { getDatabase, ref, onValue, set, Unsubscribe } from 'firebase/database';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Lightbulb, LightbulbOff, AirVent, Fan, DoorOpen, DoorClosed, Camera, Sun, Moon, PersonStanding } from 'lucide-react';
+import { Loader2, Lightbulb, LightbulbOff, AirVent, Fan, DoorOpen, DoorClosed, Camera, Sun, Moon, PersonStanding, WifiOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { UserData } from '@/lib/types';
 import { useRouter } from 'next/navigation';
@@ -49,12 +49,13 @@ const initialSensors: Omit<Sensor, 'state' | 'last_triggered'>[] = [
 ];
 
 // Initialize Firebase RTDB app instance outside of the component render cycle
+let rtdbApp;
 try {
-  getApp('rtdb');
+  rtdbApp = getApp('rtdb');
 } catch (e) {
-  initializeApp(firebaseConfig, 'rtdb');
+  rtdbApp = initializeApp(firebaseConfig, 'rtdb');
 }
-const rtdb = getDatabase(getApp('rtdb'));
+const rtdb = getDatabase(rtdbApp);
 
 
 const DeviceCard = ({ device, onToggle, isUpdating }: { device: Device, onToggle: (id: string, currentState: boolean) => void, isUpdating: boolean }) => {
@@ -119,43 +120,48 @@ const SensorCard = ({ sensor }: { sensor: Sensor }) => {
 export default function LalisaPage() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [sensors, setSensors] = useState<Sensor[]>([]);
+  
+  // Robust loading state management
   const [loading, setLoading] = useState(true);
+  const [dataLoadState, setDataLoadState] = useState({ devices: false, sensors: false });
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   const [updatingDevices, setUpdatingDevices] = useState<string[]>([]);
   const { toast } = useToast();
   const router = useRouter();
 
   useEffect(() => {
+    // Only turn off loading spinner if both data sources have responded.
+    if (dataLoadState.devices && dataLoadState.sensors) {
+      setLoading(false);
+    }
+  }, [dataLoadState]);
+  
+  useEffect(() => {
     let devicesUnsubscribe: Unsubscribe | null = null;
     let sensorsUnsubscribe: Unsubscribe | null = null;
-    let dataLoaded = { devices: false, sensors: false };
 
-    const checkAllDataLoaded = () => {
-      if (dataLoaded.devices && dataLoaded.sensors) {
-        setLoading(false);
-      }
-    };
-
-    // --- Devices Listener ---
     const devicesRef = ref(rtdb, 'devices/');
-    devicesUnsubscribe = onValue(devicesRef, (snapshot) => {
-      const data = snapshot.val();
-      const mergedDevices = initialDevices.map(d => ({
-          ...d,
-          state: data?.[d.id]?.state ?? false
-      }));
-      setDevices(mergedDevices);
-      dataLoaded.devices = true;
-      checkAllDataLoaded();
-    }, (error) => {
-        console.error("Firebase device listener error:", error);
-        toast({ title: 'Gagal memuat perangkat', variant: 'destructive'});
-        dataLoaded.devices = true;
-        checkAllDataLoaded();
-    });
+    devicesUnsubscribe = onValue(devicesRef, 
+      (snapshot) => {
+        const data = snapshot.val();
+        const mergedDevices = initialDevices.map(d => ({
+            ...d,
+            state: data?.[d.id]?.state ?? false
+        }));
+        setDevices(mergedDevices);
+        setDataLoadState(prev => ({...prev, devices: true}));
+      }, 
+      (error) => {
+        console.error("Firebase devices listener error:", error);
+        setLoadError("Gagal terhubung ke data perangkat.");
+        setDataLoadState(prev => ({...prev, devices: true})); // Mark as loaded to stop spinner
+      }
+    );
 
-    // --- Sensors Listener ---
     const sensorsRef = ref(rtdb, 'sensors/');
-    sensorsUnsubscribe = onValue(sensorsRef, (snapshot) => {
+    sensorsUnsubscribe = onValue(sensorsRef, 
+      (snapshot) => {
         const data = snapshot.val();
         const mergedSensors = initialSensors.map(s => ({
             ...s,
@@ -163,21 +169,20 @@ export default function LalisaPage() {
             last_triggered: data?.[s.id]?.last_triggered ?? null,
         }));
         setSensors(mergedSensors);
-        dataLoaded.sensors = true;
-        checkAllDataLoaded();
-    }, (error) => {
-        console.error("Firebase sensor listener error:", error);
-        toast({ title: 'Gagal memuat sensor', variant: 'destructive'});
-        dataLoaded.sensors = true;
-        checkAllDataLoaded();
-    });
+        setDataLoadState(prev => ({...prev, sensors: true}));
+      },
+      (error) => {
+        console.error("Firebase sensors listener error:", error);
+        setLoadError("Gagal terhubung ke data sensor.");
+        setDataLoadState(prev => ({...prev, sensors: true})); // Mark as loaded to stop spinner
+      }
+    );
 
     return () => {
       if (devicesUnsubscribe) devicesUnsubscribe();
       if (sensorsUnsubscribe) sensorsUnsubscribe();
     };
-  }, [toast]);
-
+  }, []);
 
   const handleToggleDevice = async (id: string, currentState: boolean) => {
     setUpdatingDevices(prev => [...prev, id]);
@@ -187,6 +192,7 @@ export default function LalisaPage() {
     } catch (error: any) {
         toast({ title: 'Gagal Mengubah Status', description: error.message, variant: 'destructive' });
     } finally {
+        // Use a timeout to give Firebase a moment to sync, providing better UX
         setTimeout(() => {
             setUpdatingDevices(prev => prev.filter(dId => dId !== id));
         }, 500);
@@ -194,12 +200,22 @@ export default function LalisaPage() {
   };
   
   const cctvAddress = "#"; 
+  const userInfo: UserData | null = JSON.parse(localStorage.getItem('user') || 'null');
 
   if (loading) {
     return <div className="flex h-screen w-full items-center justify-center"><Loader2 className="h-10 w-10 animate-spin text-primary"/></div>;
   }
   
-  const userInfo: UserData | null = JSON.parse(localStorage.getItem('user') || 'null');
+  if (loadError) {
+    return (
+        <div className="flex flex-col h-screen w-full items-center justify-center text-center p-4">
+            <WifiOff className="h-16 w-16 text-destructive mb-4"/>
+            <h2 className="text-xl font-bold">Koneksi Gagal</h2>
+            <p className="text-muted-foreground">{loadError}</p>
+            <p className="text-muted-foreground mt-2 text-sm">Pastikan ESP32 terhubung dan API Key sudah benar.</p>
+        </div>
+    );
+  }
 
   return (
     <div className="min-h-screen w-full max-w-md mx-auto flex flex-col bg-background text-foreground p-4 space-y-6">
