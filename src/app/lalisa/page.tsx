@@ -11,7 +11,7 @@ import { Loader2, Lightbulb, LightbulbOff, AirVent, Fan, DoorOpen, DoorClosed, C
 import { cn } from '@/lib/utils';
 import type { UserData } from '@/lib/types';
 import { useRouter } from 'next/navigation';
-import { firebaseConfig } from '@/lib/firebase'; // Menggunakan config dari file firebase yang ada
+import { firebaseConfig } from '@/lib/firebase';
 
 interface Device {
   id: string;
@@ -48,9 +48,10 @@ const initialSensors: Omit<Sensor, 'state' | 'last_triggered'>[] = [
   { id: 'sensor_cahaya', name: 'Sensor Cahaya', pin: 12 },
 ];
 
-// Initialize Firebase
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-const db = getDatabase(app); // Dapatkan instance Realtime Database
+// Initialize Firebase RTDB app instance outside of the component render cycle
+const rtdbApp = getApps().find(app => app.name === 'rtdb') || initializeApp(firebaseConfig, 'rtdb');
+const rtdb = getDatabase(rtdbApp);
+
 
 const DeviceCard = ({ device, onToggle, isUpdating }: { device: Device, onToggle: (id: string, currentState: boolean) => void, isUpdating: boolean }) => {
   const { name, type, state } = device;
@@ -120,8 +121,8 @@ export default function LalisaPage() {
   const router = useRouter();
 
   useEffect(() => {
-    const devicesRef = ref(db, 'devices/');
-    const unsubscribeDevices = onValue(devicesRef, (snapshot) => {
+    const devicesRef = ref(rtdb, 'devices/');
+    const onDevicesValueChange = onValue(devicesRef, (snapshot) => {
       const data = snapshot.val();
       const mergedDevices = initialDevices.map(d => ({
           ...d,
@@ -131,8 +132,8 @@ export default function LalisaPage() {
       setLoading(false);
     });
 
-    const sensorsRef = ref(db, 'sensors/');
-    const unsubscribeSensors = onValue(sensorsRef, (snapshot) => {
+    const sensorsRef = ref(rtdb, 'sensors/');
+    const onSensorsValueChange = onValue(sensorsRef, (snapshot) => {
         const data = snapshot.val();
         const mergedSensors = initialSensors.map(s => ({
             ...s,
@@ -143,15 +144,15 @@ export default function LalisaPage() {
     });
 
     return () => {
-      unsubscribeDevices();
-      unsubscribeSensors();
+      onDevicesValueChange(); // This is how you unsubscribe with RTDB's onValue
+      onSensorsValueChange();
     };
   }, []);
 
   const handleToggleDevice = async (id: string, currentState: boolean) => {
     setUpdatingDevices(prev => [...prev, id]);
     try {
-        const deviceRef = ref(db, 'devices/' + id);
+        const deviceRef = ref(rtdb, 'devices/' + id);
         await set(deviceRef, { state: !currentState });
     } catch (error: any) {
         toast({ title: 'Gagal Mengubah Status', description: error.message, variant: 'destructive' });
